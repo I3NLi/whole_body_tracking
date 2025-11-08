@@ -167,6 +167,16 @@ class EventCfg:
         },
     )
 
+    collider_offsets = EventTerm(
+        func=mdp.randomize_rigid_body_collider_offsets,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            "rest_offset_distribution_params": (0.0, 0.003),
+            "contact_offset_distribution_params": (0.003, 0.006),
+        },
+    )
+
     add_joint_default_pos = EventTerm(
         func=mdp.randomize_joint_default_pos,
         mode="startup",
@@ -183,6 +193,49 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
             "com_range": {"x": (-0.025, 0.025), "y": (-0.05, 0.05), "z": (-0.05, 0.05)},
+        },
+    )
+
+    mass_scale = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            "mass_distribution_params": (0.9, 1.1),
+            "operation": "scale",
+        },
+    )
+
+    actuator_gains = EventTerm(
+        func=mdp.randomize_actuator_gains,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "stiffness_distribution_params": (0.7, 1.3),
+            "damping_distribution_params": (0.6, 1.4),
+            "operation": "scale",
+            "distribution": "log_uniform",
+        },
+    )
+
+    joint_params = EventTerm(
+        func=mdp.randomize_joint_parameters,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "friction_distribution_params": (0.5, 1.5),
+            "armature_distribution_params": (0.5, 1.5),
+            "operation": "scale",
+            "distribution": "log_uniform",
+        },
+    )
+
+    gravity = EventTerm(
+        func=mdp.randomize_physics_scene_gravity,
+        mode="reset",
+        params={
+            "gravity_distribution_params": ([0.0, 0.0, -0.5], [0.0, 0.0, 0.5]),
+            "operation": "add",
         },
     )
 
