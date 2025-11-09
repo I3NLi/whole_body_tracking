@@ -20,6 +20,8 @@
 # Outputs
 **/runs/*
 **/logs/*
+**/logs*/*
+**/motions/*
 **/recordings/*
 **/output/*
 **/outputs/*
