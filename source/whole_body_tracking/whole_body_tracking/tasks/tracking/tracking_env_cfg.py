@@ -247,6 +247,20 @@ class EventCfg:
         params={"velocity_range": VELOCITY_RANGE},
     )
 
+    # interval: 额外在物理上施加随机外力 / 力矩
+    external_wrench = EventTerm(
+        func=mdp.apply_external_force_torque,
+        mode="interval",
+        interval_range_s=(5.0, 10.0),
+        params={
+            # 这里只对躯干施加外力，避免对所有小 link 随便乱推导致发散
+            "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
+            # 力的采样区间 (N)
+            "force_range": (-2.0, 2.0),
+            # 力矩的采样区间 (N·m)
+            # "torque_range": (-15.0, 15.0),
+        },
+    )
 
 @configclass
 class RewardsCfg:

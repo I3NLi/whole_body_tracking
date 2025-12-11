@@ -21,6 +21,7 @@ from isaaclab.envs.mdp.events import (
     randomize_rigid_body_scale as _base_randomize_rigid_body_scale,
     randomize_visual_color as _BaseRandomizeVisualColor,
     randomize_visual_texture_material as _BaseRandomizeVisualTextureMaterial,
+    apply_external_force_torque as _base_apply_external_force_torque,
 )
 from isaaclab.managers import EventTermCfg, SceneEntityCfg
 
@@ -41,6 +42,7 @@ __all__ = (
     "randomize_physics_scene_gravity",
     "randomize_visual_texture_material",
     "randomize_visual_color",
+    "apply_external_force_torque",
 )
 
 
@@ -348,6 +350,35 @@ def randomize_physics_scene_gravity(
         distribution=distribution,
     )
 
+def apply_external_force_torque(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor,
+    force_range: tuple[float, float],
+    torque_range: tuple[float, float],
+    asset_cfg: SceneEntityCfg = SceneEntityCfg(name="robot"),
+):
+    """对刚体施加随机外力和力矩（带日志封装版本）。
+
+    直接调用 IsaacLab 自带的 isaaclab.envs.mdp.events.apply_external_force_torque。
+    force_range / torque_range 是标量区间 (min, max)，每个 body、每个 env 会各采一组随机 3D 向量。
+    """
+    record_randomization_event(
+        "apply_external_force_torque",
+        env_ids=env_ids,
+        details={
+            "asset": asset_cfg.name,
+            "body_names": getattr(asset_cfg, "body_names", None),
+            "force_range": force_range,
+            "torque_range": torque_range,
+        },
+    )
+    return _base_apply_external_force_torque(
+        env,
+        env_ids,
+        force_range,
+        torque_range,
+        asset_cfg=asset_cfg,
+    )
 
 class randomize_rigid_body_material(_BaseRandomizeRigidBodyMaterial):
     def __init__(self, cfg: EventTermCfg, env: ManagerBasedEnv):

@@ -1,5 +1,7 @@
 """Script to play a checkpoint if an RL agent from RSL-RL (no wandb)."""
-#python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-v0 --num_envs=2
+# python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-v0 --num_envs=2
+# python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2
+
 """Launch Isaac Sim Simulator first."""
 
 import argparse
@@ -15,8 +17,9 @@ import cli_args  # isort: skip
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Play an RL agent with RSL-RL (load from logs).")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during play.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
+#TODO no video 
+parser.add_argument("--video", action="store_true", default=False, help="Record videos during play.") 
+parser.add_argument("--video_length", type=int, default=6000, help="Length of the recorded video (in steps).")
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )

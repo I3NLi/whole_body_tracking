@@ -3,6 +3,24 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-v0 --num_envs=2 \
+--resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_3500.pt \
+--motion_file=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/motion.npz \
+"""
+
+
+"""
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 \
+--motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.mp4 \
+--headless
+"""
+
+
+
+
 """Script to train RL agent with RSL-RL (local-only: load motion locally, save locally)."""
 
 # ---------- Launch Isaac Sim Simulator first ----------
@@ -30,7 +48,7 @@ parser.add_argument(
     required=True,
     help="Path to local motion npz file (e.g. /path/to/motion.npz).",
 )
-
+parser.add_argument("--resume_path", type=str, default=None, help="Name of the task.") 
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -162,9 +180,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # resume if requested
     if agent_cfg.resume:
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        # resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        resume_path =args_cli.resume_path
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-        runner.load(resume_path)
+        runner.load(args_cli.resume_path)
 
     # persist configs
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
