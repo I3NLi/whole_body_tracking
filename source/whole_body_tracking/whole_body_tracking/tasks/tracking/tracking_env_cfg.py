@@ -258,7 +258,7 @@ class EventCfg:
             # 力的采样区间 (N)
             "force_range": (-2.0, 2.0),
             # 力矩的采样区间 (N·m)
-            # "torque_range": (-15.0, 15.0),
+            "torque_range": (-2.0, 2.0),
         },
     )
 
