@@ -122,6 +122,11 @@ class ObservationsCfg:
         motion_anchor_ori_b = ObsTerm(
             func=mdp.motion_anchor_ori_b, params={"command_name": "motion"}, noise=Unoise(n_min=-0.05, n_max=0.05)
         )
+        base_gravity = ObsTerm(
+            func=mdp.body_projected_gravity_b,
+            params={"asset_cfg": SceneEntityCfg("robot", body_names=["pelvis"])},
+            noise=Unoise(n_min=-0.02, n_max=0.02),
+        )  
         base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.5, n_max=0.5))
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
@@ -131,6 +136,10 @@ class ObservationsCfg:
         def __post_init__(self):
             self.enable_corruption = True
             self.concatenate_terms = True
+            # ✅ 加 history
+
+            self.history_length = 1           # ← 你要几帧
+            self.flatten_history_dim = True  # ← (H, D) → (H*D,)
 
     @configclass
     class PrivilegedCfg(ObsGroup):
@@ -248,19 +257,19 @@ class EventCfg:
     )
 
     # interval: 额外在物理上施加随机外力 / 力矩
-    external_wrench = EventTerm(
-        func=mdp.apply_external_force_torque,
-        mode="interval",
-        interval_range_s=(5.0, 10.0),
-        params={
-            # 这里只对躯干施加外力，避免对所有小 link 随便乱推导致发散
-            "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
-            # 力的采样区间 (N)
-            "force_range": (-2.0, 2.0),
-            # 力矩的采样区间 (N·m)
-            "torque_range": (-2.0, 2.0),
-        },
-    )
+    # external_wrench = EventTerm(
+    #     func=mdp.apply_external_force_torque,
+    #     mode="interval",
+    #     interval_range_s=(5.0, 10.0),
+    #     params={
+    #         # 这里只对躯干施加外力，避免对所有小 link 随便乱推导致发散
+    #         "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
+    #         # 力的采样区间 (N)
+    #         "force_range": (-2.0, 2.0),
+    #         # 力矩的采样区间 (N·m)
+    #         "torque_range": (-2.0, 2.0),
+    #     },
+    # )
 
 @configclass
 class RewardsCfg:

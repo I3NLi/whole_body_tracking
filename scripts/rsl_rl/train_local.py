@@ -5,7 +5,7 @@
 
 """
 python scripts/rsl_rl/train_local.py \
---task=Tracking-Flat-G1-v0 --num_envs=2 \
+--task=Tracking-Flat-G1-v0 --num_envs=4096 \
 --resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_3500.pt \
 --motion_file=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/motion.npz \
 """
@@ -14,12 +14,17 @@ python scripts/rsl_rl/train_local.py \
 """
 python scripts/rsl_rl/train_local.py \
 --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 \
---motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.mp4 \
+--motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.npz \
 --headless
 """
 
-
-
+"""
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 \
+--resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-12-26_11-12-52_dance1_subject2+Tracking-Flat-G1-Wo-State-Estimation-v0/model_63500.pt \
+--motion_file=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-12-26_11-12-52_dance1_subject2+Tracking-Flat-G1-Wo-State-Estimation-v0/motion.npz \
+--headless
+"""
 
 """Script to train RL agent with RSL-RL (local-only: load motion locally, save locally)."""
 
