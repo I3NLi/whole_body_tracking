@@ -9,6 +9,13 @@ class HumanoidFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 50
     experiment_name = "humanoid_flat"
     empirical_normalization = False
+    use_torch_compile = True
+    torch_compile_backend = "inductor"
+    torch_compile_mode = "default"
+    torch_compile_fullgraph = False
+    torch_compile_dynamic = False
+    use_amp = True
+    amp_dtype = "fp16"
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
