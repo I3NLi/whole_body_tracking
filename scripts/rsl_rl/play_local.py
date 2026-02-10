@@ -34,6 +34,19 @@ parser.add_argument("--checkpoint_name", type=str, default=None,
 
 # Keep motion_file but also auto-discover below if not provided
 parser.add_argument("--motion_file", type=str, default=None, help="Path to the motion npz file.")
+parser.add_argument(
+    "--motion_files",
+    type=str,
+    nargs="+",
+    default=None,
+    help="List of motion npz files for mixed playback.",
+)
+parser.add_argument(
+    "--motion_dir",
+    type=str,
+    default=None,
+    help="Directory containing motion npz files (all *.npz will be used).",
+)
 
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
@@ -111,6 +124,79 @@ def _auto_find_motion(log_dir: str) -> str | None:
     return None
 
 
+def _auto_find_motions(log_dir: str) -> list[str] | None:
+    """Try to find multiple motions under log_dir (motion_list.txt or motions/*.npz)."""
+    motion_list = os.path.join(log_dir, "motion_list.txt")
+    if os.path.isfile(motion_list):
+        motions_dir = os.path.join(log_dir, "motions")
+        resolved: list[str] = []
+        with open(motion_list, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split("\t")
+                name = parts[0]
+                original = parts[1] if len(parts) > 1 else None
+                local_path = os.path.join(motions_dir, name)
+                if os.path.isfile(local_path):
+                    resolved.append(local_path)
+                elif original and os.path.isfile(original):
+                    resolved.append(original)
+        return resolved if resolved else None
+
+    motions_dir = os.path.join(log_dir, "motions")
+    if os.path.isdir(motions_dir):
+        files = sorted(glob.glob(os.path.join(motions_dir, "*.npz")))
+        return files if files else None
+
+    return None
+
+
+def _resolve_motion_files(args_cli: argparse.Namespace) -> list[str] | None:
+    files: list[str] = []
+    if args_cli.motion_files:
+        files.extend(args_cli.motion_files)
+    if args_cli.motion_file:
+        if "," in args_cli.motion_file:
+            files.extend([p for p in args_cli.motion_file.split(",") if p])
+        else:
+            files.append(args_cli.motion_file)
+    if args_cli.motion_dir:
+        if not os.path.isdir(args_cli.motion_dir):
+            raise FileNotFoundError(f"Motion dir not found: {args_cli.motion_dir}")
+        files.extend(sorted(glob.glob(os.path.join(args_cli.motion_dir, "*.npz"))))
+        if not files:
+            files.extend(sorted(glob.glob(os.path.join(args_cli.motion_dir, "**", "*.npz"), recursive=True)))
+
+    # expand any glob patterns
+    expanded: list[str] = []
+    for path in files:
+        if any(ch in path for ch in ["*", "?", "["]):
+            expanded.extend(sorted(glob.glob(path)))
+        else:
+            expanded.append(path)
+
+    # de-duplicate while preserving order
+    seen = set()
+    deduped: list[str] = []
+    for path in expanded:
+        abspath = os.path.abspath(path)
+        if abspath in seen:
+            continue
+        seen.add(abspath)
+        deduped.append(abspath)
+
+    if not deduped:
+        return None
+
+    missing = [p for p in deduped if not os.path.isfile(p)]
+    if missing:
+        raise FileNotFoundError(f"Motion file(s) not found: {missing}")
+
+    return deduped
+
+
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlOnPolicyRunnerCfg):
     """Play with RSL-RL agent loaded from local logs."""
@@ -148,20 +234,30 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
 
     # resolve motion file
-    if args_cli.motion_file is not None:
-        env_cfg.commands.motion.motion_file = args_cli.motion_file
-        print(f"[INFO]: Using motion file from CLI: {args_cli.motion_file}")
+    motion_files = _resolve_motion_files(args_cli)
+    if motion_files:
+        env_cfg.commands.motion.motion_files = motion_files
+        env_cfg.commands.motion.motion_file = motion_files[0]
+        print(f"[INFO]: Using motion files from CLI: {len(motion_files)} files")
     else:
-        # attempt to auto-discover motion.npz in the run directory
-        auto_motion = _auto_find_motion(os.path.dirname(resume_path))
-        if auto_motion is None:
-            auto_motion = _auto_find_motion(run_dir)
-        if auto_motion:
-            env_cfg.commands.motion.motion_file = auto_motion
-            print(f"[INFO]: Auto-discovered motion file: {auto_motion}")
+        auto_motion_files = _auto_find_motions(os.path.dirname(resume_path))
+        if auto_motion_files is None:
+            auto_motion_files = _auto_find_motions(run_dir)
+        if auto_motion_files:
+            env_cfg.commands.motion.motion_files = auto_motion_files
+            env_cfg.commands.motion.motion_file = auto_motion_files[0]
+            print(f"[INFO]: Auto-discovered motion files: {len(auto_motion_files)} files")
         else:
-            print("[WARN]: motion.npz not found under logs. "
-                  "If this task needs motion data, please specify --motion_file <path>.")
+            # fallback to single motion.npz
+            auto_motion = _auto_find_motion(os.path.dirname(resume_path))
+            if auto_motion is None:
+                auto_motion = _auto_find_motion(run_dir)
+            if auto_motion:
+                env_cfg.commands.motion.motion_file = auto_motion
+                print(f"[INFO]: Auto-discovered motion file: {auto_motion}")
+            else:
+                print("[WARN]: motion.npz not found under logs. "
+                      "If this task needs motion data, please specify --motion_file <path>.")
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)

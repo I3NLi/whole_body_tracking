@@ -40,14 +40,17 @@ class DelayedImplicitActuator(ImplicitActuator):
             num_envs = self._num_envs
         else:
             num_envs = len(env_ids)
-        # set a new random delay for environments in env_ids
-        time_lags = torch.randint(
-            low=self.cfg.min_delay,
-            high=self.cfg.max_delay + 1,
-            size=(num_envs,),
-            dtype=torch.int,
-            device=self._device,
-        )
+        # set a new random delay for environments in env_ids (or disable delay)
+        if not self.cfg.enable_delay or self.cfg.max_delay <= 0:
+            time_lags = torch.zeros(num_envs, dtype=torch.int, device=self._device)
+        else:
+            time_lags = torch.randint(
+                low=self.cfg.min_delay,
+                high=self.cfg.max_delay + 1,
+                size=(num_envs,),
+                dtype=torch.int,
+                device=self._device,
+            )
         # set delays
         self.positions_delay_buffer.set_time_lag(time_lags, env_ids)
         self.velocities_delay_buffer.set_time_lag(time_lags, env_ids)
@@ -73,6 +76,9 @@ class DelayedImplicitActuatorCfg(ImplicitActuatorCfg):
     """Configuration for a delayed PD actuator."""
 
     class_type: type = DelayedImplicitActuator
+
+    enable_delay: bool = False
+    """Whether to enable action delay. Defaults to False."""
 
     min_delay: int = 0
     """Minimum number of physics time-steps with which the actuator command may be delayed. Defaults to 0."""

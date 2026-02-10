@@ -36,6 +36,10 @@ VELOCITY_RANGE = {
     "yaw": (-0.78, 0.78),
 }
 
+# Scale push strength for easier tuning
+PUSH_VELOCITY_SCALE = 1.0
+PUSH_VELOCITY_RANGE = {k: (v[0] * PUSH_VELOCITY_SCALE, v[1] * PUSH_VELOCITY_SCALE) for k, v in VELOCITY_RANGE.items()}
+
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
@@ -253,7 +257,7 @@ class EventCfg:
         func=mdp.push_by_setting_velocity,
         mode="interval",
         interval_range_s=(1.0, 3.0),
-        params={"velocity_range": VELOCITY_RANGE},
+        params={"velocity_range": PUSH_VELOCITY_RANGE},
     )
 
     # interval: 额外在物理上施加随机外力 / 力矩
@@ -394,5 +398,6 @@ class TrackingEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
         # viewer settings
         self.viewer.eye = (1.5, 1.5, 1.5)
-        self.viewer.origin_type = "asset_root"
+        # self.viewer.origin_type = "asset_root"
+        self.viewer.origin_type = "world"
         self.viewer.asset_name = "robot"
