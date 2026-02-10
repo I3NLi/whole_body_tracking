@@ -35,9 +35,6 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
         "--wandb_path", type=str, default=None, help="Name of the logging project when using wandb or neptune."
     )
     # -- performance arguments
-    compile_group = arg_group.add_mutually_exclusive_group()
-    compile_group.add_argument("--torch_compile", action="store_true", help="Enable torch.compile().")
-    compile_group.add_argument("--no_torch_compile", action="store_true", help="Disable torch.compile().")
     amp_group = arg_group.add_mutually_exclusive_group()
     amp_group.add_argument("--amp", action="store_true", help="Enable AMP (autocast).")
     amp_group.add_argument("--no_amp", action="store_true", help="Disable AMP (autocast).")
@@ -97,10 +94,6 @@ def update_rsl_rl_cfg(agent_cfg: RslRlOnPolicyRunnerCfg, args_cli: argparse.Name
         agent_cfg.neptune_project = args_cli.log_project_name
 
     # performance flags
-    if getattr(args_cli, "torch_compile", False):
-        agent_cfg.use_torch_compile = True
-    if getattr(args_cli, "no_torch_compile", False):
-        agent_cfg.use_torch_compile = False
     if getattr(args_cli, "amp", False):
         agent_cfg.use_amp = True
     if getattr(args_cli, "no_amp", False):

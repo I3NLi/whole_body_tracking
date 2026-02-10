@@ -9,11 +9,6 @@ class G1FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 500
     experiment_name = "g1_flat"
     empirical_normalization = True
-    use_torch_compile = True
-    torch_compile_backend = "inductor"
-    torch_compile_mode = "default"
-    torch_compile_fullgraph = False
-    torch_compile_dynamic = False
     use_amp = True
     amp_dtype = "fp16"
     policy = RslRlPpoActorCriticCfg(
