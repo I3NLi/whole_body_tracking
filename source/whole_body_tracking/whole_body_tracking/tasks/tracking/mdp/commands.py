@@ -31,7 +31,10 @@ class MotionLoader:
     def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
         assert os.path.isfile(motion_file), f"Invalid file path: {motion_file}"
         data = np.load(motion_file)
-        self.fps = data["fps"]
+        fps = data["fps"]
+        if isinstance(fps, np.ndarray):
+            fps = fps.item() if fps.size == 1 else float(fps.flatten()[0])
+        self.fps = float(fps)
         self.joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
         self.joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
         self._body_pos_w = torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device)
@@ -98,6 +101,13 @@ class MotionCommand(CommandTerm):
         self._motion_lengths = torch.tensor(
             [motion.time_step_total for motion in self.motions], dtype=torch.long, device=self.device
         )
+        self._motion_hold_seconds = float(getattr(self.cfg, "motion_hold_seconds", 0.0) or 0.0)
+        self._motion_hold_frames = torch.tensor(
+            [max(0, int(round(motion.fps * self._motion_hold_seconds))) for motion in self.motions],
+            dtype=torch.long,
+            device=self.device,
+        )
+        self._hold_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self._motion_bin_counts = [
             int(motion.time_step_total // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1 for motion in self.motions
         ]
@@ -355,8 +365,20 @@ class MotionCommand(CommandTerm):
     def _update_command(self):
         self.time_steps += 1
         motion_lengths = self._motion_lengths[self.motion_ids]
-        env_ids = torch.where(self.time_steps >= motion_lengths)[0]
-        self._resample_command(env_ids)
+        at_end = self.time_steps >= motion_lengths
+        if torch.any(at_end):
+            # Keep indices pinned to the last frame while holding.
+            self.time_steps = torch.where(at_end, motion_lengths - 1, self.time_steps)
+            hold_frames = self._motion_hold_frames[self.motion_ids]
+            self._hold_steps[at_end] += 1
+            ready = at_end & ((hold_frames <= 0) | (self._hold_steps >= hold_frames))
+            if torch.any(ready):
+                env_ids = torch.where(ready)[0]
+                self._hold_steps[env_ids] = 0
+                self._resample_command(env_ids)
+        # reset hold counters for envs not at end
+        if torch.any(~at_end):
+            self._hold_steps[~at_end] = 0
 
         anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
         anchor_quat_w_repeat = self.anchor_quat_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
@@ -450,6 +472,8 @@ class MotionCommandCfg(CommandTermCfg):
     adaptive_lambda: float = 0.8
     adaptive_uniform_ratio: float = 0.1
     adaptive_alpha: float = 0.001
+    # Hold the last frame for extra stability before resampling (seconds).
+    motion_hold_seconds: float = 0.0
 
     anchor_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/Command/pose")
     anchor_visualizer_cfg.markers["frame"].scale = (0.2, 0.2, 0.2)
