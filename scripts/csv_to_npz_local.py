@@ -47,6 +47,13 @@ parser.add_argument(
     help="Directory to save the output NPZ files (and mp4 if --record).",
 )
 parser.add_argument("--output_fps", type=int, default=50, help="FPS of output motion.")
+parser.add_argument(
+    "--robot",
+    type=str,
+    default="g1",
+    choices=["g1", "t1"],
+    help="Robot profile used for joint ordering and articulation setup.",
+)
 
 # 录制开关：开了就导出 mp4（和 npz 同名同目录）
 parser.add_argument(
@@ -116,6 +123,49 @@ from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_mul, quat_slerp
 from whole_body_tracking.robots.g1 import G1_CYLINDER_CFG
+from whole_body_tracking.robots.t1 import T1_CYLINDER_CFG, T1_JOINT_NAMES
+
+G1_JOINT_NAMES = [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+    "waist_yaw_joint",
+    "waist_roll_joint",
+    "waist_pitch_joint",
+    "left_shoulder_pitch_joint",
+    "left_shoulder_roll_joint",
+    "left_shoulder_yaw_joint",
+    "left_elbow_joint",
+    "left_wrist_roll_joint",
+    "left_wrist_pitch_joint",
+    "left_wrist_yaw_joint",
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_joint",
+    "right_wrist_roll_joint",
+    "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint",
+]
+
+# Pick the articulation + joint order once so all downstream paths stay consistent.
+if args_cli.robot == "t1":
+    ROBOT_CFG = T1_CYLINDER_CFG
+    ROBOT_JOINT_NAMES = T1_JOINT_NAMES
+else:
+    ROBOT_CFG = G1_CYLINDER_CFG
+    ROBOT_JOINT_NAMES = G1_JOINT_NAMES
+
+print(f"[INFO] Robot profile: {args_cli.robot}, dof={len(ROBOT_JOINT_NAMES)}")
 
 # ======== 录制相关依赖：omni.kit.renderer.capture ========
 _capture_available = False
@@ -147,7 +197,7 @@ class ReplayMotionsSceneCfg(InteractiveSceneCfg):
             texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
         ),
     )
-    robot: ArticulationCfg = G1_CYLINDER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    robot: ArticulationCfg = ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
 
 # ========== 4. Motion Loader ==========
@@ -178,6 +228,13 @@ class MotionLoader:
                 )
             )
         motion = motion.to(torch.float32).to(self.device)
+        expected_cols = 7 + len(ROBOT_JOINT_NAMES)
+        if motion.shape[1] != expected_cols:
+            raise ValueError(
+                f"CSV column mismatch for robot={args_cli.robot}: got {motion.shape[1]}, expected {expected_cols} "
+                f"(root:7 + dof:{len(ROBOT_JOINT_NAMES)})."
+            )
+
         self.motion_base_poss_input = motion[:, :3]
         self.motion_base_rots_input = motion[:, 3:7][:, [3, 0, 1, 2]]  # to wxyz
         self.motion_dof_poss_input = motion[:, 7:]
@@ -435,37 +492,7 @@ def main():
     sim.reset()
     print("[INFO] Isaac Sim setup complete.")
 
-    joint_names = [
-        "left_hip_pitch_joint",
-        "left_hip_roll_joint",
-        "left_hip_yaw_joint",
-        "left_knee_joint",
-        "left_ankle_pitch_joint",
-        "left_ankle_roll_joint",
-        "right_hip_pitch_joint",
-        "right_hip_roll_joint",
-        "right_hip_yaw_joint",
-        "right_knee_joint",
-        "right_ankle_pitch_joint",
-        "right_ankle_roll_joint",
-        "waist_yaw_joint",
-        "waist_roll_joint",
-        "waist_pitch_joint",
-        "left_shoulder_pitch_joint",
-        "left_shoulder_roll_joint",
-        "left_shoulder_yaw_joint",
-        "left_elbow_joint",
-        "left_wrist_roll_joint",
-        "left_wrist_pitch_joint",
-        "left_wrist_yaw_joint",
-        "right_shoulder_pitch_joint",
-        "right_shoulder_roll_joint",
-        "right_shoulder_yaw_joint",
-        "right_elbow_joint",
-        "right_wrist_roll_joint",
-        "right_wrist_pitch_joint",
-        "right_wrist_yaw_joint",
-    ]
+    joint_names = ROBOT_JOINT_NAMES
 
     if INPUT_IS_DIR:
         csv_pattern = os.path.join(args_cli.input_file, "*.csv")

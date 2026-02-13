@@ -12,6 +12,9 @@ set -euo pipefail
 #   VIDEO_NAME and TIMESTAMP can be overridden:
 #     VIDEO_NAME=custom_name TIMESTAMP=20260212-101010 \
 #     bash .../video_to_motion_bundle.sh /path/to/video.mp4
+#
+#   Robot can be selected with ROBOT_KEY (default: g1):
+#     ROBOT_KEY=t1 bash .../video_to_motion_bundle.sh /path/to/video.mp4
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 /path/to/video.mp4"
@@ -27,6 +30,24 @@ fi
 VIDEO_BASENAME="$(basename "$VIDEO")"
 VIDEO_NAME="${VIDEO_NAME:-${VIDEO_BASENAME%.*}}"
 TIMESTAMP="${TIMESTAMP:-$(date +"%Y%m%d-%H%M%S")}"
+ROBOT_KEY="${ROBOT_KEY:-g1}"
+GMR_ROOT="${GMR_ROOT:-/home/hiyio/HoloMotion/thirdparties/GMR}"
+
+case "$ROBOT_KEY" in
+  g1)
+    GMR_ROBOT="unitree_g1"
+    NPZ_ROBOT="g1"
+    ;;
+  t1)
+    # Use booster_t1 (23-DoF) so it stays consistent with T1_serial.urdf.
+    GMR_ROBOT="booster_t1"
+    NPZ_ROBOT="t1"
+    ;;
+  *)
+    echo "Unsupported ROBOT_KEY: $ROBOT_KEY (expected: g1 or t1)"
+    exit 1
+    ;;
+esac
 
 RUN_DIR="/home/hiyio/whole_body_tracking/motions/${TIMESTAMP}-${VIDEO_NAME}"
 GVHMR_OUT="${RUN_DIR}/gvhmr"
@@ -54,7 +75,7 @@ if [[ ! -f "$SMPL_FILE" ]]; then
 fi
 
 echo "[2/5] SMPL -> SMPLX"
-python /home/hiyio/GMR/scripts/smpl_to_smplx.py \
+python "$GMR_ROOT/scripts/smpl_to_smplx.py" \
   --input_file "$SMPL_FILE" \
   --output_file "$SMPLX_FILE" \
   --gender neutral
@@ -64,10 +85,10 @@ if [[ ! -f "$SMPLX_FILE" ]]; then
   exit 1
 fi
 
-echo "[3/5] SMPLX -> GMR PKL"
+echo "[3/5] SMPLX -> GMR PKL (robot=${GMR_ROBOT})"
 ln -sf "$SMPLX_FILE" "$SMPLX_ONLY/${VIDEO_NAME}.npz"
-conda run -n gmr python /home/hiyio/GMR/scripts/smplx_to_robot_dataset.py \
-  --robot unitree_g1 \
+conda run -n gmr python "$GMR_ROOT/scripts/smplx_to_robot_dataset.py" \
+  --robot "$GMR_ROBOT" \
   --src_folder "$SMPLX_ONLY" \
   --tgt_folder "$GMR_OUT" \
   --num_cpus 1 --override
@@ -93,6 +114,7 @@ fi
 echo "[5/5] CSV -> NPZ"
 conda run -n env_isaaclab python /home/hiyio/whole_body_tracking/scripts/csv_to_npz_local.py \
   --input_file "$CSV_FILE" \
+  --robot "$NPZ_ROBOT" \
   --input_fps 30 --output_fps 50 \
   --output_dir "$NPZ_OUT" \
   --output_name "$VIDEO_NAME" \
