@@ -108,6 +108,22 @@ class MotionCommand(CommandTerm):
             device=self.device,
         )
         self._hold_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+        self._pause_prob = float(getattr(self.cfg, "random_pause_prob", 0.0) or 0.0)
+        pause_range = getattr(self.cfg, "random_pause_duration_s", (0.0, 0.0)) or (0.0, 0.0)
+        pause_min_s, pause_max_s = float(pause_range[0]), float(pause_range[1])
+        if pause_max_s < pause_min_s:
+            pause_min_s, pause_max_s = pause_max_s, pause_min_s
+        self._pause_min_frames = torch.tensor(
+            [max(0, int(round(motion.fps * pause_min_s))) for motion in self.motions],
+            dtype=torch.long,
+            device=self.device,
+        )
+        self._pause_max_frames = torch.tensor(
+            [max(0, int(round(motion.fps * pause_max_s))) for motion in self.motions],
+            dtype=torch.long,
+            device=self.device,
+        )
+        self._pause_steps_left = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self._motion_bin_counts = [
             int(motion.time_step_total // (1 / (env.cfg.decimation * env.cfg.sim.dt))) + 1 for motion in self.motions
         ]
@@ -327,6 +343,8 @@ class MotionCommand(CommandTerm):
     def _resample_command(self, env_ids: Sequence[int]):
         if len(env_ids) == 0:
             return
+        # Clear any pending pause when resampling a new motion segment.
+        self._pause_steps_left[env_ids] = 0
         if self.motion_count > 1:
             self.motion_ids[env_ids] = self._sample_motion_ids(len(env_ids))
         self._adaptive_sampling(env_ids)
@@ -363,7 +381,31 @@ class MotionCommand(CommandTerm):
         )
 
     def _update_command(self):
-        self.time_steps += 1
+        pause_mask = self._pause_steps_left > 0
+        if self._pause_prob > 0.0 and torch.any(~pause_mask):
+            max_pause_frames = int(torch.max(self._pause_max_frames).item()) if len(self._pause_max_frames) else 0
+            if max_pause_frames > 0:
+                new_pause = (~pause_mask) & (torch.rand(self.num_envs, device=self.device) < self._pause_prob)
+                if torch.any(new_pause):
+                    env_ids = torch.where(new_pause)[0]
+                    motion_ids = self.motion_ids[env_ids]
+                    min_frames = self._pause_min_frames[motion_ids]
+                    max_frames = self._pause_max_frames[motion_ids]
+                    max_frames = torch.maximum(max_frames, min_frames)
+                    span = (max_frames - min_frames).float()
+                    if torch.all(span == 0):
+                        lengths = min_frames
+                    else:
+                        lengths = min_frames + torch.floor(torch.rand(len(env_ids), device=self.device) * (span + 1)).long()
+                    valid = lengths > 0
+                    if torch.any(valid):
+                        self._pause_steps_left[env_ids[valid]] = lengths[valid]
+                        pause_mask = self._pause_steps_left > 0
+
+        advance_mask = ~pause_mask
+        if torch.any(advance_mask):
+            self.time_steps[advance_mask] += 1
+
         motion_lengths = self._motion_lengths[self.motion_ids]
         at_end = self.time_steps >= motion_lengths
         if torch.any(at_end):
@@ -379,6 +421,10 @@ class MotionCommand(CommandTerm):
         # reset hold counters for envs not at end
         if torch.any(~at_end):
             self._hold_steps[~at_end] = 0
+
+        if torch.any(pause_mask):
+            self._pause_steps_left[pause_mask] -= 1
+            self._pause_steps_left = torch.clamp(self._pause_steps_left, min=0)
 
         anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
         anchor_quat_w_repeat = self.anchor_quat_w[:, None, :].repeat(1, len(self.cfg.body_names), 1)
@@ -474,6 +520,9 @@ class MotionCommandCfg(CommandTermCfg):
     adaptive_alpha: float = 0.001
     # Hold the last frame for extra stability before resampling (seconds).
     motion_hold_seconds: float = 0.0
+    # Random pause to freeze the current motion frame (seconds).
+    random_pause_prob: float = 0.0
+    random_pause_duration_s: tuple[float, float] = (0.0, 0.0)
 
     anchor_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/Command/pose")
     anchor_visualizer_cfg.markers["frame"].scale = (0.2, 0.2, 0.2)

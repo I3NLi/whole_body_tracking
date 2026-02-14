@@ -12,6 +12,12 @@ import argparse
 import numpy as np
 import torch
 import os
+import sys
+from pathlib import Path
+
+REPO_SOURCE = Path(__file__).resolve().parents[1] / "source" / "whole_body_tracking"
+if REPO_SOURCE.is_dir():
+    sys.path.insert(0, str(REPO_SOURCE))
 
 from isaaclab.app import AppLauncher
 

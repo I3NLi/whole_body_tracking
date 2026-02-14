@@ -90,7 +90,9 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(1.0e9, 1.0e9),
         debug_vis=True,
-        motion_hold_seconds=1.0,
+        motion_hold_seconds=0.0,
+        random_pause_prob=0.0,
+        random_pause_duration_s=(0.0, 0.0),
         pose_range={
             "x": (-0.05, 0.05),
             "y": (-0.05, 0.05),
@@ -310,10 +312,13 @@ class RewardsCfg:
         weight=1.0,
         params={"command_name": "motion", "std": 3.14},
     )
-    # Base stability terms (encourage upright, low vertical/tilt motion).
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.5)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-0.5)
+    # Encourage higher base height (weights are controlled per-robot in env configs).
+    base_height_above = RewTerm(func=mdp.base_height_above, weight=0.0, params={"min_height": 0.7, "max_height": 0.9})
+    # Base stability terms (weights are controlled per-robot in env configs).
+    # Original defaults (kept here for reference): -0.5, -0.05, -0.5
+    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=0.0)
+    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=0.0)
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0.0)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-1e-1)
     joint_limit = RewTerm(
         func=mdp.joint_pos_limits,
@@ -348,19 +353,19 @@ class TerminationsCfg:
         func=mdp.bad_anchor_ori,
         params={"asset_cfg": SceneEntityCfg("robot"), "command_name": "motion", "threshold": 0.8},
     )
-    ee_body_pos = DoneTerm(
-        func=mdp.bad_motion_body_pos_z_only,
-        params={
-            "command_name": "motion",
-            "threshold": 0.25,
-            "body_names": [
-                "left_ankle_roll_link",
-                "right_ankle_roll_link",
-                "left_wrist_yaw_link",
-                "right_wrist_yaw_link",
-            ],
-        },
-    )
+    # ee_body_pos = DoneTerm(
+    #     func=mdp.bad_motion_body_pos_z_only,
+    #     params={
+    #         "command_name": "motion",
+    #         "threshold": 0.25,
+    #         "body_names": [
+    #             "left_ankle_roll_link",
+    #             "right_ankle_roll_link",
+    #             "left_wrist_yaw_link",
+    #             "right_wrist_yaw_link",
+    #         ],
+    #     },
+    # )
 
 
 @configclass

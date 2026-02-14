@@ -11,7 +11,13 @@ class G1FlatEnvCfg(TrackingEnvCfg):
         super().__post_init__()
         self.scene.robot = G1_CYLINDER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
         self.actions.joint_pos.scale = G1_ACTION_SCALE
-        self.commands.motion.motion_hold_seconds = 2.0
+
+        # Hold the final motion frame for stability before resampling.
+        # self.commands.motion.motion_hold_seconds = 2.0
+        # Randomly pause (freeze current frame) to mimic deploy pause behavior.
+        # self.commands.motion.random_pause_prob = 0.01
+        # Each pause lasts 1-2 seconds (in motion fps), then resumes.
+        # self.commands.motion.random_pause_duration_s = (1.0, 2.0)
         self.commands.motion.anchor_body_name = "torso_link"
         self.commands.motion.body_names = [
             "pelvis",
@@ -29,6 +35,15 @@ class G1FlatEnvCfg(TrackingEnvCfg):
             "right_elbow_link",
             "right_wrist_yaw_link",
         ]
+        # High-CoM guidance term (more aggressive for flips).
+        self.rewards.base_height_above.weight = 0.4
+        self.rewards.base_height_above.params["min_height"] = 0.78
+        self.rewards.base_height_above.params["max_height"] = 0.95
+        # Base stability rewards (controlled here for G1; keep disabled for now).
+        # Original weights: lin_vel_z_l2=-0.5, ang_vel_xy_l2=-0.05, flat_orientation_l2=-0.5
+        self.rewards.lin_vel_z_l2.weight = 0.0
+        self.rewards.ang_vel_xy_l2.weight = 0.0
+        self.rewards.flat_orientation_l2.weight = 0.0
 
 
 @configclass

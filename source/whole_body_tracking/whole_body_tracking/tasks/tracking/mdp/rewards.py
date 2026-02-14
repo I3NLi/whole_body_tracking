@@ -74,11 +74,27 @@ def motion_global_body_angular_velocity_error_exp(
     return torch.exp(-error.mean(-1) / std**2)
 
 
+def base_height_above(
+    env: ManagerBasedRLEnv,
+    min_height: float,
+    max_height: float | None = None,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward maintaining a higher base height by granting positive reward above a minimum.
+
+    The reward grows linearly above min_height and optionally saturates at max_height.
+    """
+    asset = env.scene[asset_cfg.name]
+    height = asset.data.root_pos_w[:, 2]
+    if max_height is not None:
+        height = torch.minimum(height, height.new_tensor(max_height))
+    return torch.clamp(height - min_height, min=0.0)
+
+
 def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float) -> torch.Tensor:
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     first_air = contact_sensor.compute_first_air(env.step_dt, env.physics_dt)[:, sensor_cfg.body_ids]
     last_contact_time = contact_sensor.data.last_contact_time[:, sensor_cfg.body_ids]
     reward = torch.sum((last_contact_time < threshold) * first_air, dim=-1)
     return reward
-
 

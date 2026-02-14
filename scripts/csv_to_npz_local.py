@@ -15,7 +15,13 @@ import os
 import glob
 import subprocess
 import shutil
+import sys
+from pathlib import Path
 import numpy as np
+
+REPO_SOURCE = Path(__file__).resolve().parents[1] / "source" / "whole_body_tracking"
+if REPO_SOURCE.is_dir():
+    sys.path.insert(0, str(REPO_SOURCE))
 
 from isaaclab.app import AppLauncher
 
@@ -47,6 +53,23 @@ parser.add_argument(
     help="Directory to save the output NPZ files (and mp4 if --record).",
 )
 parser.add_argument("--output_fps", type=int, default=50, help="FPS of output motion.")
+parser.add_argument(
+    "--render",
+    action=argparse.BooleanOptionalAction,
+    default=False,
+    help="Whether to render every frame. Disable for faster offline conversion (default: false).",
+)
+parser.add_argument(
+    "--yup_to_zup",
+    action="store_true",
+    help="Rotate root motion from Y-up to Z-up before replay/logging.",
+)
+parser.add_argument(
+    "--target_min_z",
+    type=float,
+    default=0.02,
+    help="Target global min body z after optional Y-up->Z-up conversion.",
+)
 
 # 录制开关：开了就导出 mp4（和 npz 同名同目录）
 parser.add_argument(
@@ -152,7 +175,7 @@ class ReplayMotionsSceneCfg(InteractiveSceneCfg):
 
 # ========== 4. Motion Loader ==========
 class MotionLoader:
-    def __init__(self, motion_file, input_fps, output_fps, device, frame_range):
+    def __init__(self, motion_file, input_fps, output_fps, device, frame_range, yup_to_zup=False):
         self.motion_file = motion_file
         self.input_fps = input_fps
         self.output_fps = output_fps
@@ -160,9 +183,20 @@ class MotionLoader:
         self.output_dt = 1.0 / output_fps
         self.device = device
         self.frame_range = frame_range
+        self.yup_to_zup = yup_to_zup
         self._load_motion()
         self._interpolate_motion()
         self._compute_velocities()
+
+    @staticmethod
+    def _quat_mul_wxyz(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+        aw, ax, ay, az = a.unbind(dim=-1)
+        bw, bx, by, bz = b.unbind(dim=-1)
+        w = aw * bw - ax * bx - ay * by - az * bz
+        x = aw * bx + ax * bw + ay * bz - az * by
+        y = aw * by - ax * bz + ay * bw + az * bx
+        z = aw * bz + ax * by - ay * bx + az * bw
+        return torch.stack((w, x, y, z), dim=-1)
 
     def _load_motion(self):
         if self.frame_range is None:
@@ -181,6 +215,27 @@ class MotionLoader:
         self.motion_base_poss_input = motion[:, :3]
         self.motion_base_rots_input = motion[:, 3:7][:, [3, 0, 1, 2]]  # to wxyz
         self.motion_dof_poss_input = motion[:, 7:]
+
+        if self.yup_to_zup:
+            # Rx(+90deg): [x, y, z] -> [x, -z, y]
+            rot_mat = torch.tensor(
+                [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+                dtype=torch.float32,
+                device=self.device,
+            )
+            qfix = torch.tensor(
+                [np.sqrt(0.5), np.sqrt(0.5), 0.0, 0.0],
+                dtype=torch.float32,
+                device=self.device,
+            ).unsqueeze(0)
+
+            self.motion_base_poss_input = self.motion_base_poss_input @ rot_mat.T
+            qfix = qfix.expand(self.motion_base_rots_input.shape[0], -1)
+            self.motion_base_rots_input = self._quat_mul_wxyz(qfix, self.motion_base_rots_input)
+            quat_norm = torch.linalg.norm(self.motion_base_rots_input, dim=-1, keepdim=True).clamp_min(1e-8)
+            self.motion_base_rots_input = self.motion_base_rots_input / quat_norm
+            print("[INFO] Applied root transform: Y-up -> Z-up")
+
         self.input_frames = motion.shape[0]
         self.duration = (self.input_frames - 1) * self.input_dt
         print(f"[INFO] Loaded motion: {self.motion_file}")
@@ -330,6 +385,58 @@ def _frames_to_mp4(frame_dir: str, base_name: str, fps: int):
 
 
 # ========== 5. Simulation Runner ==========
+def _write_motion_state_to_sim(robot, scene, joint_idx, state, root_z_offset: float):
+    (
+        motion_base_pos,
+        motion_base_rot,
+        motion_base_lin_vel,
+        motion_base_ang_vel,
+        motion_dof_pos,
+        motion_dof_vel,
+    ) = state
+
+    root = robot.data.default_root_state.clone()
+    root[:, :3] = motion_base_pos
+    root[:, 2] += root_z_offset
+    root[:, :2] += scene.env_origins[:, :2]
+    root[:, 3:7] = motion_base_rot
+    root[:, 7:10] = motion_base_lin_vel
+    root[:, 10:] = motion_base_ang_vel
+    robot.write_root_state_to_sim(root)
+
+    jp, jv = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
+    jp[:, joint_idx], jv[:, joint_idx] = motion_dof_pos, motion_dof_vel
+    robot.write_joint_state_to_sim(jp, jv)
+
+
+def _estimate_root_z_offset(sim, scene, robot, joint_idx, motion) -> float:
+    if not args_cli.yup_to_zup:
+        return 0.0
+
+    print("[INFO] Estimating z offset for floor alignment...")
+    min_z = float("inf")
+    motion.reset()
+
+    while simulation_app.is_running():
+        state, reset_flag = motion.get_next_state()
+        _write_motion_state_to_sim(robot, scene, joint_idx, state, root_z_offset=0.0)
+        sim.forward()
+        scene.update(sim.get_physics_dt())
+        cur_min_z = float(robot.data.body_pos_w[0, :, 2].min().item())
+        min_z = min(min_z, cur_min_z)
+        if reset_flag:
+            break
+
+    motion.reset()
+    if not np.isfinite(min_z):
+        print("[WARN] Failed to estimate min body z, using offset=0.0")
+        return 0.0
+
+    z_offset = args_cli.target_min_z - min_z
+    print(f"[INFO] body_min_z={min_z:.5f}, applying root_z_offset={z_offset:.5f}")
+    return z_offset
+
+
 def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
     """对单个 csv 跑一遍模拟并保存 npz，并可选录制 mp4（通过帧 + ffmpeg）。"""
     print(f"\n[INFO] ===== Processing file: {csv_path} =====")
@@ -345,6 +452,7 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
         args_cli.output_fps,
         sim.device,
         args_cli.frame_range,
+        yup_to_zup=args_cli.yup_to_zup,
     )
     motion.reset()
 
@@ -354,6 +462,7 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
 
     robot = scene["robot"]
     joint_idx = robot.find_joints(joint_names, preserve_order=True)[0]
+    root_z_offset = _estimate_root_z_offset(sim, scene, robot, joint_idx, motion)
 
     log = {
         "fps": [args_cli.output_fps],
@@ -368,33 +477,19 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
     frame_idx = 0
 
     while simulation_app.is_running():
-        (state, reset_flag) = motion.get_next_state()
-        (
-            motion_base_pos,
-            motion_base_rot,
-            motion_base_lin_vel,
-            motion_base_ang_vel,
-            motion_dof_pos,
-            motion_dof_vel,
-        ) = state
-
-        root = robot.data.default_root_state.clone()
-        root[:, :3] = motion_base_pos
-        root[:, :2] += scene.env_origins[:, :2]
-        root[:, 3:7] = motion_base_rot
-        root[:, 7:10] = motion_base_lin_vel
-        root[:, 10:] = motion_base_ang_vel
-        robot.write_root_state_to_sim(root)
-
-        jp, jv = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
-        jp[:, joint_idx], jv[:, joint_idx] = motion_dof_pos, motion_dof_vel
-        robot.write_joint_state_to_sim(jp, jv)
+        state, reset_flag = motion.get_next_state()
+        _write_motion_state_to_sim(robot, scene, joint_idx, state, root_z_offset=root_z_offset)
 
         if args_cli.record and frame_dir is not None:
             frame_idx += 1
             _capture_frame(frame_dir, base_name, frame_idx)
 
-        sim.render()
+        # For offline conversion we only need up-to-date kinematics, not viewport rendering.
+        # Rendering each frame is significantly slower for large batch conversion.
+        if args_cli.record or args_cli.render:
+            sim.render()
+        else:
+            sim.forward()
         scene.update(sim.get_physics_dt())
 
         if not file_saved:
@@ -482,4 +577,8 @@ def main():
 
 if __name__ == "__main__":
     main()
-    simulation_app.close()
+    # SimulationApp teardown occasionally hangs after long recording runs.
+    # We hard-exit after all outputs are written to keep batch pipelines progressing.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
