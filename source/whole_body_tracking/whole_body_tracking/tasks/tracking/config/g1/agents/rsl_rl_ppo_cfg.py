@@ -33,6 +33,14 @@ class G1FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 
+@configclass
+class G1FlatBackflipPPORunnerCfg(G1FlatPPORunnerCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        self.experiment_name = "g1_backflip"
+        self.max_iterations = 100000
+
+
 LOW_FREQ_SCALE = 0.5
 
 

@@ -188,7 +188,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "rest_offset_distribution_params": (0.0, 0.003),
+            "rest_offset_distribution_params": (0.0, 0.002),
             "contact_offset_distribution_params": (0.003, 0.006),
         },
     )
