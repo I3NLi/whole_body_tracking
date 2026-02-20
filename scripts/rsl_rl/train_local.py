@@ -313,9 +313,20 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # resume if requested
     if agent_cfg.resume:
         # resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
-        resume_path =args_cli.resume_path
+        resume_path = args_cli.resume_path
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-        runner.load(args_cli.resume_path)
+        try:
+            runner.load(resume_path)
+        except KeyError as e:
+            # Backward compatibility: older checkpoints may not contain obs_norm_state_dict.
+            if "obs_norm_state_dict" not in str(e):
+                raise
+            print("[WARN] Checkpoint missing obs_norm_state_dict. Falling back to legacy load path.")
+            loaded_dict = torch.load(resume_path, map_location=runner.device)
+            runner.alg.actor_critic.load_state_dict(loaded_dict["model_state_dict"])
+            runner.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
+            runner.current_learning_iteration = loaded_dict.get("iter", 0)
+            runner.last_learning_iteration = runner.current_learning_iteration
 
     # persist configs
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)

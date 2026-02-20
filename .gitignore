@@ -46,3 +46,8 @@ _build
 artifacts/
 Video/
 datasets/
+
+inputs/
+
+**/.tmp_pip_src_backup/**
+

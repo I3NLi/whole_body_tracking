@@ -103,7 +103,7 @@ parser.add_argument(
 parser.add_argument(
     "--camera_distance",
     type=float,
-    default=8,
+    default=7,
     help="Camera distance in front of character root when --camera_follow_front is enabled.",
 )
 parser.add_argument(
@@ -179,7 +179,6 @@ from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.sim import SimulationContext
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_mul, quat_slerp
 from whole_body_tracking.robots.g1 import G1_CYLINDER_CFG
 
@@ -280,12 +279,10 @@ else:
 @configclass
 class ReplayMotionsSceneCfg(InteractiveSceneCfg):
     ground = AssetBaseCfg(prim_path="/World/defaultGroundPlane", spawn=sim_utils.GroundPlaneCfg())
+    # Keep lighting fully local so offline runs do not depend on Nucleus/remote HDR assets.
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
-        spawn=sim_utils.DomeLightCfg(
-            intensity=750.0,
-            texture_file=f"{ISAAC_NUCLEUS_DIR}/Materials/Textures/Skies/PolyHaven/kloofendal_43d_clear_puresky_4k.hdr",
-        ),
+        spawn=sim_utils.DomeLightCfg(intensity=750.0, color=(0.82, 0.86, 1.0)),
     )
     robot: ArticulationCfg = G1_CYLINDER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
