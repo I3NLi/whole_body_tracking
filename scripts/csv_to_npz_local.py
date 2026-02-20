@@ -94,6 +94,36 @@ parser.add_argument(
     action="store_true",
     help="Disable automatic render stability fix for Isaac Sim 4.5 on RTX 5090.",
 )
+parser.add_argument(
+    "--camera_follow_front",
+    action=argparse.BooleanOptionalAction,
+    default=True,
+    help="Keep camera in front of the character and look at the character (default: true).",
+)
+parser.add_argument(
+    "--camera_distance",
+    type=float,
+    default=8,
+    help="Camera distance in front of character root when --camera_follow_front is enabled.",
+)
+parser.add_argument(
+    "--camera_height",
+    type=float,
+    default=0.92,
+    help="Camera height offset from root when --camera_follow_front is enabled.",
+)
+parser.add_argument(
+    "--camera_lookat_height",
+    type=float,
+    default=0.62,
+    help="Look-at height offset from root when --camera_follow_front is enabled.",
+)
+parser.add_argument(
+    "--camera_yaw_offset_deg",
+    type=float,
+    default=-60,
+    help="Extra yaw offset (degrees) for a 3/4 front view when --camera_follow_front is enabled.",
+)
 
 # 由 AppLauncher 自动添加 --headless、--renderer 等
 AppLauncher.add_app_launcher_args(parser)
@@ -822,6 +852,58 @@ def _write_motion_state_to_sim(robot, scene, joint_idx, state):
     robot.write_joint_state_to_sim(jp, jv)
 
 
+def _quat_wxyz_to_yaw(quat_wxyz: torch.Tensor) -> float:
+    w, x, y, z = [float(v) for v in quat_wxyz]
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def _update_front_camera(sim, state, cam_ctx=None):
+    if not args_cli.camera_follow_front:
+        return
+    if cam_ctx is not None and cam_ctx.get("locked", False):
+        return
+    motion_base_pos = state[0]
+    motion_base_rot = state[1]
+    if motion_base_pos.numel() < 3 or motion_base_rot.numel() < 4:
+        return
+
+    root_pos = motion_base_pos[0].detach().cpu()
+    root_quat = motion_base_rot[0].detach().cpu()  # wxyz
+    yaw = _quat_wxyz_to_yaw(root_quat) + math.radians(float(args_cli.camera_yaw_offset_deg))
+    forward_xy = np.array([math.cos(yaw), math.sin(yaw)], dtype=np.float64)
+
+    cam_pos = np.array(
+        [
+            float(root_pos[0]) + args_cli.camera_distance * forward_xy[0],
+            float(root_pos[1]) + args_cli.camera_distance * forward_xy[1],
+            float(root_pos[2]) + args_cli.camera_height,
+        ],
+        dtype=np.float64,
+    )
+    target = np.array(
+        [
+            float(root_pos[0]),
+            float(root_pos[1]),
+            float(root_pos[2]) + args_cli.camera_lookat_height,
+        ],
+        dtype=np.float64,
+    )
+
+    try:
+        sim.set_camera_view(eye=cam_pos.tolist(), target=target.tolist())
+    except TypeError:
+        sim.set_camera_view(cam_pos.tolist(), target.tolist())
+    except Exception as e:
+        print(f"[Camera] set_camera_view failed: {e}")
+        return
+
+    # Lock camera after first frame: fixed viewpoint facing the first frame.
+    if cam_ctx is not None:
+        cam_ctx["locked"] = True
+
+
 def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
     """对单个 csv 跑一遍模拟并保存 npz，并可选录制 mp4。"""
     print(f"\n[INFO] ===== Processing file: {csv_path} =====")
@@ -844,6 +926,7 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
     robot = scene["robot"]
     joint_idx = robot.find_joints(joint_names, preserve_order=True)[0]
     capture_ctx = _start_video_capture(base_name, motion.output_frames)
+    cam_ctx = {"locked": False}
 
     log = {
         "fps": [args_cli.output_fps],
@@ -859,6 +942,7 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
     while simulation_app.is_running():
         state, reset_flag = motion.get_next_state()
         _write_motion_state_to_sim(robot, scene, joint_idx, state)
+        _update_front_camera(sim, state, cam_ctx)
 
         if capture_ctx is not None and capture_ctx.get("backend") == "renderer":
             capture_ctx["frame_idx"] += 1
