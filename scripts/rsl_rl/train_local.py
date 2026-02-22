@@ -49,6 +49,7 @@ import argparse
 import sys
 import shutil
 import glob
+import yaml
 
 from isaaclab.app import AppLauncher
 
@@ -189,6 +190,37 @@ def _resolve_motion_files(args_cli: argparse.Namespace) -> list[str]:
     return deduped
 
 
+def _fill_beyond_mimic_pd_from_env(env, yaml_path: str) -> None:
+    """Update kp_lab/kd_lab in BeyondMimic.yaml from current env PD gains."""
+    if not os.path.isfile(yaml_path):
+        print(f"[WARN] BeyondMimic config not found, skip fill kp/kd: {yaml_path}")
+        return
+    try:
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"[WARN] Failed to read BeyondMimic config, skip fill kp/kd: {e}")
+        return
+
+    try:
+        robot = env.unwrapped.scene["robot"]
+        kp_lab = robot.data.joint_stiffness[0].detach().cpu().tolist()
+        kd_lab = robot.data.joint_damping[0].detach().cpu().tolist()
+    except Exception as e:
+        print(f"[WARN] Failed to read env joint stiffness/damping, skip fill kp/kd: {e}")
+        return
+
+    cfg["kp_lab"] = [float(v) for v in kp_lab]
+    cfg["kd_lab"] = [float(v) for v in kd_lab]
+
+    try:
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=False)
+        print(f"[INFO] Filled kp_lab/kd_lab from env into: {yaml_path}")
+    except Exception as e:
+        print(f"[WARN] Failed to write BeyondMimic config with kp/kd: {e}")
+
+
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlOnPolicyRunnerCfg):
     """Train with RSL-RL agent (local-only)."""
@@ -246,6 +278,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # create log directory before copy
     os.makedirs(log_dir, exist_ok=True)
 
+    # copy BeyondMimic policy config into log directory for reproducibility
+    beyond_mimic_cfg_src = "/home/hiyio/RoboMimic_Deploy/policy/beyond_mimic/config/BeyondMimic.yaml"
+    beyond_mimic_cfg_dst = os.path.join(log_dir, "BeyondMimic.yaml")
+    if os.path.isfile(beyond_mimic_cfg_src):
+        shutil.copy2(beyond_mimic_cfg_src, beyond_mimic_cfg_dst)
+        print(f"[INFO] BeyondMimic config copied to: {beyond_mimic_cfg_dst}")
+    else:
+        print(f"[WARN] BeyondMimic config not found, skip copy: {beyond_mimic_cfg_src}")
+
     # copy motion npz into log directory
     if len(motion_files) == 1:
         dst_motion = os.path.join(log_dir, "motion.npz")
@@ -278,6 +319,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print(f"[INFO] Motion files copied to: {motions_dir}")
     # --------- Create env ---------
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    _fill_beyond_mimic_pd_from_env(env, beyond_mimic_cfg_dst)
 
     # video wrapper (optional)
     if args_cli.video:
