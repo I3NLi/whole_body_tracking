@@ -190,8 +190,8 @@ def _resolve_motion_files(args_cli: argparse.Namespace) -> list[str]:
     return deduped
 
 
-def _fill_beyond_mimic_pd_from_env(env, yaml_path: str) -> None:
-    """Update kp_lab/kd_lab in BeyondMimic.yaml from current env PD gains."""
+def _fill_beyond_mimic_config_from_env(env, yaml_path: str, onnx_path: str | None = None) -> None:
+    """Update BeyondMimic.yaml with runtime kp/kd (and optional onnx_path)."""
     if not os.path.isfile(yaml_path):
         print(f"[WARN] BeyondMimic config not found, skip fill kp/kd: {yaml_path}")
         return
@@ -212,11 +212,16 @@ def _fill_beyond_mimic_pd_from_env(env, yaml_path: str) -> None:
 
     cfg["kp_lab"] = [float(v) for v in kp_lab]
     cfg["kd_lab"] = [float(v) for v in kd_lab]
+    if onnx_path:
+        cfg["onnx_path"] = str(onnx_path)
 
     try:
         with open(yaml_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=False)
-        print(f"[INFO] Filled kp_lab/kd_lab from env into: {yaml_path}")
+        if onnx_path:
+            print(f"[INFO] Filled kp_lab/kd_lab and onnx_path into: {yaml_path}")
+        else:
+            print(f"[INFO] Filled kp_lab/kd_lab from env into: {yaml_path}")
     except Exception as e:
         print(f"[WARN] Failed to write BeyondMimic config with kp/kd: {e}")
 
@@ -319,7 +324,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print(f"[INFO] Motion files copied to: {motions_dir}")
     # --------- Create env ---------
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-    _fill_beyond_mimic_pd_from_env(env, beyond_mimic_cfg_dst)
+    run_onnx_name = f"{os.path.basename(log_dir)}.onnx"
+    run_onnx_path = os.path.join(log_dir, run_onnx_name)
+    _fill_beyond_mimic_config_from_env(env, beyond_mimic_cfg_dst, onnx_path=run_onnx_path)
 
     # video wrapper (optional)
     if args_cli.video:
