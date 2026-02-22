@@ -1,7 +1,9 @@
 from isaaclab.utils import configclass
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 
 from whole_body_tracking.robots.g1 import G1_ACTION_SCALE, G1_CYLINDER_CFG
 from whole_body_tracking.tasks.tracking.config.g1.agents.rsl_rl_ppo_cfg import LOW_FREQ_SCALE
+import whole_body_tracking.tasks.tracking.mdp as mdp
 from whole_body_tracking.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
 
 
@@ -52,6 +54,17 @@ class G1FlatWoStateEstimationEnvCfg(G1FlatEnvCfg):
         super().__post_init__()
         self.observations.policy.motion_anchor_pos_b = None
         self.observations.policy.base_lin_vel = None
+        # Keep the last motion frame for 3s before resampling.
+        self.commands.motion.motion_hold_seconds = 3.0
+        # Enable progressive curriculum for Wo-State estimation by default.
+        self.curriculum.wostate_progressive = CurrTerm(
+            func=mdp.wostate_progressive_curriculum,
+            params={
+                "total_steps": 6_000_000,
+                "stage_ends": (0.35, 0.60, 0.85),
+                "max_stop_ratio": 0.20,
+            },
+        )
 
 
 @configclass
@@ -97,3 +110,17 @@ class G1FlatLowFreqEnvCfg(G1FlatEnvCfg):
         super().__post_init__()
         self.decimation = round(self.decimation / LOW_FREQ_SCALE)
         self.rewards.action_rate_l2.weight *= LOW_FREQ_SCALE
+
+
+@configclass
+class G1FlatWoStateCurriculumEnvCfg(G1FlatWoStateEstimationEnvCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        self.curriculum.wostate_progressive = CurrTerm(
+            func=mdp.wostate_progressive_curriculum,
+            params={
+                "total_steps": 6_000_000,
+                "stage_ends": (0.35, 0.60, 0.85),
+                "max_stop_ratio": 0.20,
+            },
+        )

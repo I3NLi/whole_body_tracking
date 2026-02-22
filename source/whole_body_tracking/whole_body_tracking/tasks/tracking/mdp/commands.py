@@ -445,6 +445,24 @@ class MotionCommand(CommandTerm):
             )
             self._motion_current_bin_failed[motion_id].zero_()
 
+    def set_random_pause(self, pause_prob: float, duration_s: tuple[float, float]) -> None:
+        """Update random-pause settings at runtime for stop curriculum."""
+        self._pause_prob = max(0.0, float(pause_prob))
+        pause_min_s = max(0.0, float(duration_s[0]))
+        pause_max_s = max(0.0, float(duration_s[1]))
+        if pause_max_s < pause_min_s:
+            pause_min_s, pause_max_s = pause_max_s, pause_min_s
+        self._pause_min_frames = torch.tensor(
+            [max(0, int(round(motion.fps * pause_min_s))) for motion in self.motions],
+            dtype=torch.long,
+            device=self.device,
+        )
+        self._pause_max_frames = torch.tensor(
+            [max(0, int(round(motion.fps * pause_max_s))) for motion in self.motions],
+            dtype=torch.long,
+            device=self.device,
+        )
+
     def _set_debug_vis_impl(self, debug_vis: bool):
         if debug_vis:
             if not hasattr(self, "current_anchor_visualizer"):
