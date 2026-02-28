@@ -74,6 +74,29 @@ def motion_global_body_angular_velocity_error_exp(
     return torch.exp(-error.mean(-1) / std**2)
 
 
+def motion_global_anchor_peak_angular_velocity_error_exp(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    std: float,
+) -> torch.Tensor:
+    """Reward matching the reference anchor's dominant angular-velocity component.
+
+    Only the per-step peak component (max abs among x/y/z) is rewarded, which is
+    useful for emphasizing key flip/rotation moments in Wo-State training.
+    """
+    command: MotionCommand = env.command_manager.get_term(command_name)
+
+    ref_ang = command.anchor_ang_vel_w
+    robot_ang = command.robot_anchor_ang_vel_w
+
+    peak_idx = torch.argmax(torch.abs(ref_ang), dim=-1, keepdim=True)
+    ref_peak = torch.gather(ref_ang, dim=1, index=peak_idx).squeeze(-1)
+    robot_peak = torch.gather(robot_ang, dim=1, index=peak_idx).squeeze(-1)
+
+    error = torch.square(ref_peak - robot_peak)
+    return torch.exp(-error / std**2)
+
+
 def base_height_above(
     env: ManagerBasedRLEnv,
     min_height: float,
@@ -98,3 +121,27 @@ def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, thresh
     reward = torch.sum((last_contact_time < threshold) * first_air, dim=-1)
     return reward
 
+
+def hand_buffer_contact(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    contact_window_s: float = 0.08,
+    fall_height_threshold: float = 0.72,
+    min_contacts: int = 1,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward hand/forearm contacts when the robot is in a low-height (falling) state.
+
+    The signal is designed for fall-buffer behavior:
+    - only active when root height is below ``fall_height_threshold``
+    - rewards having at least ``min_contacts`` contact points from configured hand bodies
+    """
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    asset = env.scene[asset_cfg.name]
+
+    recent_contact = (contact_sensor.data.last_contact_time[:, sensor_cfg.body_ids] < contact_window_s).float()
+    contact_count = recent_contact.sum(dim=-1)
+    has_buffer_contact = torch.clamp(contact_count / max(float(min_contacts), 1.0), max=1.0)
+
+    is_falling = (asset.data.root_pos_w[:, 2] < fall_height_threshold).float()
+    return is_falling * has_buffer_contact
