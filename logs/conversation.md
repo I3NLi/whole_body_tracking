@@ -10,3 +10,4 @@
 [2026-02-28 00:25 CST] User: 现在分别是什么阶段。 Assistant: 基于两训练的最新checkpoint与配置（max_iterations、resume信息）给出阶段判断：BeyondMimic为续训微调阶段，LeggedLab为本轮中期主收敛阶段。
 [2026-02-28 00:26 CST] User: whole body tracking可以翻越过去了吗。 Assistant: 依据最新训练指标判断翻越能力阶段（mean_episode_length≈494/500，reward≈29），给出‘大概率可过但需回放验证’结论。
 [2026-02-28 02:00 CST] Cron: 双训练进度与评估报告生成（whole_body_tracking + LeggedLab）。
+[2026-02-28 09:15 CST] User: 给我最新的报告。 Assistant: 汇总 two-training 最新状态（PID/GPU、checkpoint、速度、标量指标）并给阶段判断。
