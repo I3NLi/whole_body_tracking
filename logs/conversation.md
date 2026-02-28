@@ -13,3 +13,4 @@
 [2026-02-28 09:15 CST] User: 给我最新的报告。 Assistant: 汇总 two-training 最新状态（PID/GPU、checkpoint、速度、标量指标）并给阶段判断。
 [2026-02-28 09:20 CST] User: 给我beyondmimic的完整报告。 Assistant: 产出 BeyondMimic 全量训练报告（运行状态、checkpoint进度、TB核心指标与趋势、风险与建议、阶段判断）。
 [2026-02-28 09:28 CST] User: 把当前run里最好的策略放到deploy的model中提交。 Assistant: 选用当前run可部署最优策略ONNX（model_217500对应导出）复制至 RoboMimic_Deploy/policy/beyond_mimic/model/lafan/ 并更新 BeyondMimic.yaml 的 onnx_path，完成提交。
+[2026-02-28 10:54 CST] User: BeyondMimic当前的训练还是没有翻过去。 Assistant: 识别为训练指标与真实翻越成功率不一致，给出故障归因与专项训练/评估改进方案（成功率指标、奖励重构、课程与回放验证）。
