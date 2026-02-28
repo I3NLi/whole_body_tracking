@@ -19,3 +19,8 @@
 [2026-02-28 12:07 CST] User: 给我你拉起的命令。 Assistant: 提供 BeyondMimic 二次拉起的完整 nohup+conda 命令（含 resume_path、motion_file 与日志重定向路径）。
 [2026-02-28 12:27 CST] User: 给我最新的日志。 Assistant: 回传最新运行与日志快照（BeyondMimic PID 482132运行中；restart_wostate日志当前为空；新run目录仍未产出params/model；读取旧run最新TB标量：base_height_above=0.033031@step218915，feet_air_time/peak_ang_vel标签暂缺）。
 [2026-02-28 12:31 CST] User: 分析现在的状态。 Assistant: 判定 BeyondMimic 处于‘假运行/初始化卡死’（PID在但无checkpoint与event落盘，GPU仅~582MiB，kit日志停在URDF extension startup）；当前base_height奖励仅能读取旧run值（step218915=0.033031），新加 feet_air_time/peak_ang_vel 尚未产生日志；LeggedLab 仍在推进（wandb输出到 iteration 49746/50000）。
+2026-02-28 14:45: 训练监控汇报。BeyondMimic 重启 (14:33)，目前 model_800.pt。
+
+## 2026-02-28 14:34:31 +0800
+- User: 检查问题
+- Assistant: 诊断 BeyondMimic；复现并确认 1024 env 可稳定拉起，4096 env 出现大量 PhysX rest_offset/contact_offset 异常并伴随 loss NaN/Inf。
