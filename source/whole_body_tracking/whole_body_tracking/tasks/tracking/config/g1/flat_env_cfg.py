@@ -113,6 +113,61 @@ class G1FlatLowFreqEnvCfg(G1FlatEnvCfg):
 
 
 @configclass
+class G1FlatFallRecoveryEnvCfg(G1FlatWoStateEstimationEnvCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        # Fall-recovery task: aggressively randomize reset pose/velocity so policy learns to stand up.
+        self.commands.motion.pose_range = {
+            "x": (-0.40, 0.40),
+            "y": (-0.40, 0.40),
+            "z": (-0.28, 0.12),
+            "roll": (-2.2, 2.2),
+            "pitch": (-2.2, 2.2),
+            "yaw": (-3.14, 3.14),
+        }
+        self.commands.motion.velocity_range = {
+            "x": (-1.4, 1.4),
+            "y": (-1.4, 1.4),
+            "z": (-0.9, 0.9),
+            "roll": (-2.8, 2.8),
+            "pitch": (-2.8, 2.8),
+            "yaw": (-3.0, 3.0),
+        }
+        self.commands.motion.joint_position_range = (-0.40, 0.40)
+
+        # Stronger perturbations during rollout to enforce recovery robustness.
+        self.events.push_robot.interval_range_s = (6, 20)
+        self.events.push_robot.params["velocity_range"] = {
+            "x": (-4.5, 4.5),
+            "y": (-4.5, 4.5),
+            "z": (-2.0, 2.0),
+            "roll": (-3.8, 3.8),
+            "pitch": (-3.8, 3.8),
+            "yaw": (-4.5, 4.5),
+        }
+
+        # Relax early termination so policy has time to recover from severe falls.
+        self.terminations.anchor_pos.params["threshold"] = 0.55
+        self.terminations.anchor_pos.params["hold_seconds"] = 1.2
+        self.terminations.anchor_ori.params["threshold"] = 1.6
+        self.terminations.anchor_ori.params["hold_seconds"] = 1.2
+
+        # Strengthen motion-tracking targets while keeping recovery bias.
+        self.rewards.motion_global_anchor_pos.weight = 0.8
+        self.rewards.motion_global_anchor_pos.params["std"] = 0.25
+        self.rewards.motion_global_anchor_ori.weight = 0.8
+        self.rewards.motion_global_anchor_ori.params["std"] = 0.35
+        self.rewards.motion_body_pos.weight = 1.6
+        self.rewards.motion_body_pos.params["std"] = 0.25
+        self.rewards.motion_body_ori.weight = 1.6
+        self.rewards.motion_body_ori.params["std"] = 0.35
+        self.rewards.motion_body_lin_vel.weight = 1.3
+        self.rewards.motion_body_lin_vel.params["std"] = 0.8
+        self.rewards.motion_body_ang_vel.weight = 1.3
+        self.rewards.motion_body_ang_vel.params["std"] = 2.5
+
+
+@configclass
 class G1FlatWoStateCurriculumEnvCfg(G1FlatWoStateEstimationEnvCfg):
     def __post_init__(self):
         super().__post_init__()
