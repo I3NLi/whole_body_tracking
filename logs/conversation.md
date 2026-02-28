@@ -14,3 +14,4 @@
 [2026-02-28 09:20 CST] User: 给我beyondmimic的完整报告。 Assistant: 产出 BeyondMimic 全量训练报告（运行状态、checkpoint进度、TB核心指标与趋势、风险与建议、阶段判断）。
 [2026-02-28 09:28 CST] User: 把当前run里最好的策略放到deploy的model中提交。 Assistant: 选用当前run可部署最优策略ONNX（model_217500对应导出）复制至 RoboMimic_Deploy/policy/beyond_mimic/model/lafan/ 并更新 BeyondMimic.yaml 的 onnx_path，完成提交。
 [2026-02-28 10:54 CST] User: BeyondMimic当前的训练还是没有翻过去。 Assistant: 识别为训练指标与真实翻越成功率不一致，给出故障归因与专项训练/评估改进方案（成功率指标、奖励重构、课程与回放验证）。
+[2026-02-28 11:02 CST] User: wo-state 提高base高度奖励、增加foot air time、增加base最高角速度模仿奖励（仅最高值），并用 Conda BeyondMimic 重启训练。 Assistant: 已在 whole_body_tracking 增加/启用对应奖励项并重启 Wo-State 训练（停止旧PID 14298，Conda BeyondMimic 启动新训练，resume=model_218500.pt，新run=2026-02-28_10-59-41...）。
