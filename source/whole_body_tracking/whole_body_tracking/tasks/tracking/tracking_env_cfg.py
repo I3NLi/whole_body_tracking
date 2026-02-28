@@ -282,7 +282,6 @@ class EventCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    #TODO: 世界坐标可能会有问题
     motion_global_anchor_pos = RewTerm(
         func=mdp.motion_global_anchor_position_error_exp,
         weight=0.5,
@@ -313,29 +312,8 @@ class RewardsCfg:
         weight=1.0,
         params={"command_name": "motion", "std": 3.14},
     )
-    # Peak-only anchor angular velocity matching reward (enabled/tuned per task config).
-    motion_anchor_peak_ang_vel = RewTerm(
-        func=mdp.motion_global_anchor_peak_angular_velocity_error_exp,
-        weight=0.0,
-        params={"command_name": "motion", "std": 3.14},
-    )
     # Encourage higher base height (weights are controlled per-robot in env configs).
     base_height_above = RewTerm(func=mdp.base_height_above, weight=0.0, params={"min_height": 0.7, "max_height": 0.9})
-    # Feet swing/air-time encouragement (enabled/tuned per task config).
-    feet_air_time = RewTerm(
-        func=mdp.feet_contact_time,
-        weight=0.0,
-        params={
-            "sensor_cfg": SceneEntityCfg(
-                "contact_forces",
-                body_names=[
-                    "left_ankle_roll_link",
-                    "right_ankle_roll_link",
-                ],
-            ),
-            "threshold": 0.4,
-        },
-    )
     # Base stability terms (weights are controlled per-robot in env configs).
     # Original defaults (kept here for reference): -0.5, -0.05, -0.5
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=0.0)
@@ -360,23 +338,6 @@ class RewardsCfg:
             "threshold": 1.0,
         },
     )
-    # Positive reward for using hands/forearms to buffer when falling.
-    hand_buffer_contact = RewTerm(
-        func=mdp.hand_buffer_contact,
-        weight=0.0,
-        params={
-            "sensor_cfg": SceneEntityCfg(
-                "contact_forces",
-                body_names=[
-                    "left_wrist_yaw_link",
-                    "right_wrist_yaw_link",
-                ],
-            ),
-            "contact_window_s": 0.08,
-            "fall_height_threshold": 0.72,
-            "min_contacts": 1,
-        },
-    )
 
 
 @configclass
@@ -386,11 +347,11 @@ class TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     anchor_pos = DoneTerm(
         func=mdp.bad_anchor_pos_z_only,
-        params={"command_name": "motion", "threshold": 0.25, "hold_seconds": 3.0},
+        params={"command_name": "motion", "threshold": 0.25},
     )
     anchor_ori = DoneTerm(
         func=mdp.bad_anchor_ori,
-        params={"asset_cfg": SceneEntityCfg("robot"), "command_name": "motion", "threshold": 0.8, "hold_seconds": 3.0},
+        params={"asset_cfg": SceneEntityCfg("robot"), "command_name": "motion", "threshold": 0.8},
     )
     # ee_body_pos = DoneTerm(
     #     func=mdp.bad_motion_body_pos_z_only,

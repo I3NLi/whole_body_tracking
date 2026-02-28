@@ -56,20 +56,15 @@ class G1FlatWoStateEstimationEnvCfg(G1FlatEnvCfg):
         self.observations.policy.base_lin_vel = None
         # Keep the last motion frame for 3s before resampling.
         self.commands.motion.motion_hold_seconds = 3.0
-
-        # --- Wo-State crossing-focused reward tuning ---
-        # 1) Increase base-height encouragement for barrier crossing.
-        self.rewards.base_height_above.weight = 0.6
-        self.rewards.base_height_above.params["min_height"] = 0.72
-        self.rewards.base_height_above.params["max_height"] = 2.4
-
-        # 2) Add feet air-time reward to encourage decisive step-over / jump phases.
-        self.rewards.feet_air_time.weight = 0.25
-
-        # 3) Add peak-only base angular-velocity imitation reward.
-        #    (Only the maximum abs angular-velocity component per step is rewarded.)
-        self.rewards.motion_anchor_peak_ang_vel.weight = 0.8
-        self.rewards.motion_anchor_peak_ang_vel.params["std"] = 2.2
+        # Enable progressive curriculum for Wo-State estimation by default.
+        self.curriculum.wostate_progressive = CurrTerm(
+            func=mdp.wostate_progressive_curriculum,
+            params={
+                "total_steps": 6_000_000,
+                "stage_ends": (0.35, 0.60, 0.85),
+                "max_stop_ratio": 0.20,
+            },
+        )
 
 
 @configclass
