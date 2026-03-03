@@ -24,3 +24,25 @@
 ## 2026-02-28 14:34:31 +0800
 - User: 检查问题
 - Assistant: 诊断 BeyondMimic；复现并确认 1024 env 可稳定拉起，4096 env 出现大量 PhysX rest_offset/contact_offset 异常并伴随 loss NaN/Inf。
+
+## 训练监控报告 (2026-03-03 20:30)
+【A. 运行状态】
+- BeyondMimic (Tracking-Flat-G1-Wo-State-Estimation-v0): 运行中 | PID: 33791 | CPU: 133.3% | GPU显存: 8657MiB
+- LeggedLab (g1_flat): 未运行
+
+【B. 进度快照】
+- BeyondMimic: model_218500.pt (03-03 02:48) | 增量: 0 step | 速度: 0 step/h | **标记：疑似停滞**
+- LeggedLab: model_94700.pt (03-02 13:41) | 增量: 0 step | 速度: 0 step/h | **标记：已停止**
+
+【C. 评估报告】
+- 收敛/稳定性判断：需关注 (BeyondMimic 进程存在但 checkpoint 已 17 小时未更新)
+- 训练效率判断：需优化 (BeyondMimic 资源占用高但无产出；LeggedLab 处于停止状态)
+- 风险与建议：
+  1. 建议重启 BeyondMimic 训练，可能存在 Isaac Sim 仿真层死锁。
+  2. 检查 LeggedLab 训练停止原因，若是预期完成请归档。
+  3. 建议检查 GPU 5090 的驱动或热状态，当前 Perf P8 状态功耗极低 (32W) 但负载显示 1%，可能触发了某些保护。
+
+【D. 结论】
+- BeyondMimic 疑似死锁停滞，LeggedLab 未运行，训练整体未在健康推进。
+2026-03-04 01:30:00 - Training Monitor Report Generated
+[2026-03-04 02:00 CST] User: 定时训练监控提醒（每30分钟），要求汇报 BeyondMimic Tracking-Flat-G1-Wo-State-Estimation-v0 与 LeggedLab g1_flat。 Assistant: 已执行进程与checkpoint检查并输出监控报告。
