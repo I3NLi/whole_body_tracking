@@ -46,3 +46,4 @@
 - BeyondMimic 疑似死锁停滞，LeggedLab 未运行，训练整体未在健康推进。
 2026-03-04 01:30:00 - Training Monitor Report Generated
 [2026-03-04 02:00 CST] User: 定时训练监控提醒（每30分钟），要求汇报 BeyondMimic Tracking-Flat-G1-Wo-State-Estimation-v0 与 LeggedLab g1_flat。 Assistant: 已执行进程与checkpoint检查并输出监控报告。
+\n## 2026-03-04 12:32:54 训练监控提醒\n- Tracking-Flat-G1-Wo-State-Estimation-v0: 运行中 (PID 18444, CPU 284%, GPU 8657MiB), 最新 checkpoint model_219500.pt @ 2026-03-04 12:29:25\n- g1_flat: 未检测到运行进程, 最新 checkpoint model_94700.pt @ 2026-03-02 13:41:00\n
