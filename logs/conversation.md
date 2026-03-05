@@ -49,3 +49,9 @@
 \n## 2026-03-04 12:32:54 训练监控提醒\n- Tracking-Flat-G1-Wo-State-Estimation-v0: 运行中 (PID 18444, CPU 284%, GPU 8657MiB), 最新 checkpoint model_219500.pt @ 2026-03-04 12:29:25\n- g1_flat: 未检测到运行进程, 最新 checkpoint model_94700.pt @ 2026-03-02 13:41:00\n
 [2026-03-04 13:39 CST] Cron: 双训练进度与评估报告（whole_body_tracking + LeggedLab）。
 2026-03-05 02:00 训练监控提醒：检查 BeyondMimic Tracking-Flat-G1-Wo-State-Estimation-v0 与 LeggedLab g1_flat 运行状态/ckpt/评估。
+
+## 2026-03-05 13:00
+- **Task**: Training Monitor (Cron: cea65730)
+- **Status**: Checked two training runs. BeyondMimic is active (PID 163324), LeggedLab is idle.
+
+[2026-03-06 02:03:45 CST] Cron训练监控：检查 whole_body_tracking BeyondMimic/Tracking-Flat-G1-Wo-State-Estimation-v0 与 LeggedLab g1_flat 训练进度与评估。
