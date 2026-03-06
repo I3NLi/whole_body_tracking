@@ -55,3 +55,10 @@
 - **Status**: Checked two training runs. BeyondMimic is active (PID 163324), LeggedLab is idle.
 
 [2026-03-06 02:03:45 CST] Cron训练监控：检查 whole_body_tracking BeyondMimic/Tracking-Flat-G1-Wo-State-Estimation-v0 与 LeggedLab g1_flat 训练进度与评估。
+
+### 2026-03-06 07:30 训练监控快照
+- **BeyondMimic**: model_251000.pt (3/5 22:11), 状态: 停止 (最后活跃于 3/5 22:31)
+- **g1_flat**: model_94700.pt (3/2 13:41), 状态: 停止
+- **结论**: 巡检发现两项训练均未在运行。
+Report for 09:00 CST
+[2026-03-06 11:01:21 CST] Cron: 双训练进度与评估报告（whole_body_tracking + LeggedLab）。已执行本次巡检并输出报告。
