@@ -76,6 +76,7 @@ SIM_ENV="${SIM_ENV:-BeyondMimic}"
 GVHMR_DEVICE="${GVHMR_DEVICE:-cuda}"
 RECORD_BACKEND="${RECORD_BACKEND:-viewport}"
 EXPORT_MP4="${EXPORT_MP4:-1}"
+CSV2NPZ_TIMEOUT="${CSV2NPZ_TIMEOUT:-1200}"
 if ! PYTHONPATH="/home/hiyio/HoloMotion/thirdparties/GVHMR:/home/hiyio/HoloMotion/holomotion/src:${PYTHONPATH:-}" \
   conda run -n "$GVHMR_ENV" python -c "import pytorch_lightning, ultralytics, colorlog, pytorch3d, hydra_zen, ffmpeg, wis3d, yacs, timm, pycolmap, smplx; from hmr4d.configs import register_store_gvhmr" >/dev/null 2>&1; then
   echo "[WARN] Env '$GVHMR_ENV' missing GVHMR deps, fallback to 'gvhmr' for step 1."
@@ -150,6 +151,7 @@ run_csv_to_npz() {
   local backend="$1"
   local headless_flag=()
   local record_flag=()
+  local cmd=()
   if [[ "$EXPORT_MP4" == "1" ]]; then
     record_flag=(--record --record_backend "$backend")
   fi
@@ -162,27 +164,55 @@ run_csv_to_npz() {
   elif [[ "$EXPORT_MP4" != "1" ]]; then
     headless_flag=(--headless)
   fi
-  conda run -n "$SIM_ENV" python /home/hiyio/whole_body_tracking/scripts/csv_to_npz_local.py \
-    --input_file "$CSV_FILE" \
-    --input_fps 30 --output_fps 50 \
-    --output_dir "$NPZ_OUT" \
-    --output_name "$VIDEO_NAME" \
-    "${record_flag[@]}" \
-    "${headless_flag[@]}"
+
+  cmd=(conda run -n "$SIM_ENV" python /home/hiyio/whole_body_tracking/scripts/csv_to_npz_local.py
+    --input_file "$CSV_FILE"
+    --input_fps 30 --output_fps 50
+    --output_dir "$NPZ_OUT"
+    --output_name "$VIDEO_NAME"
+    "${record_flag[@]}"
+    "${headless_flag[@]}")
+
+  set +e
+  timeout --signal=TERM "$CSV2NPZ_TIMEOUT" "${cmd[@]}"
+  local rc=$?
+  set -e
+  return $rc
 }
 
-run_csv_to_npz "$RECORD_BACKEND"
-
 NPZ_FILE="${NPZ_OUT}/${VIDEO_NAME}.npz"
+CSV2NPZ_RC=0
+if ! run_csv_to_npz "$RECORD_BACKEND"; then
+  CSV2NPZ_RC=$?
+fi
+
+if [[ $CSV2NPZ_RC -ne 0 && -f "$NPZ_FILE" ]]; then
+  echo "[WARN] CSV->NPZ exited rc=${CSV2NPZ_RC}, but NPZ exists, continue."
+fi
+
 if [[ ! -f "$NPZ_FILE" ]]; then
-  echo "NPZ output not found: $NPZ_FILE"
+  if [[ "$EXPORT_MP4" == "1" && "$RECORD_BACKEND" != "renderer" ]]; then
+    echo "[WARN] CSV->NPZ failed (rc=${CSV2NPZ_RC}), retry once with renderer backend."
+    CSV2NPZ_RC=0
+    if ! run_csv_to_npz "renderer"; then
+      CSV2NPZ_RC=$?
+    fi
+  fi
+fi
+
+if [[ $CSV2NPZ_RC -ne 0 && -f "$NPZ_FILE" ]]; then
+  echo "[WARN] CSV->NPZ retry exited rc=${CSV2NPZ_RC}, but NPZ exists, continue."
+fi
+
+if [[ ! -f "$NPZ_FILE" ]]; then
+  echo "CSV->NPZ failed rc=${CSV2NPZ_RC} and NPZ not found: $NPZ_FILE"
   exit 1
 fi
 
 MP4_FILE="${NPZ_OUT}/${VIDEO_NAME}.mp4"
 if [[ "$EXPORT_MP4" == "1" && ! -f "$MP4_FILE" ]]; then
-  echo "[WARN] MP4 not found after headless run. Retrying with viewport backend (non-headless)."
-  run_csv_to_npz "viewport"
+  echo "[WARN] MP4 not found after first pass. Retrying with viewport backend (non-headless)."
+  run_csv_to_npz "viewport" || true
 fi
 
 # Convenience link at bundle root
