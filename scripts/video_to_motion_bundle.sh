@@ -329,12 +329,10 @@ run_csv_to_npz() {
       app_flags=(--headless --enable_cameras)
       ;;
     auto|*)
-      if [[ "$USER_HEADLESS" == "1" ]]; then
-        echo "[CSV2NPZ] auto mode: --headless requested by user; using headless renderer."
-        mode="headless-renderer"
-        record_flag=(--record --record_backend "$HEADLESS_FALLBACK_BACKEND")
-        app_flags=(--headless --enable_cameras)
-      elif csv2npz_display_ready "${DISPLAY:-}" || start_csv2npz_virtual_display; then
+      if csv2npz_display_ready "${DISPLAY:-}" || start_csv2npz_virtual_display; then
+        if [[ "$USER_HEADLESS" == "1" ]]; then
+          echo "[CSV2NPZ] auto mode: --headless requested, but mp4 recording needs a display; using virtual/available display + viewport."
+        fi
         mode="viewport"
         record_flag=(--record --record_backend viewport)
       else
