@@ -74,25 +74,169 @@ HOLOMOTION_ENV="${HOLOMOTION_ENV:-holomotion_train}"
 GVHMR_ENV="${GVHMR_ENV:-BeyondMimic}"
 SIM_ENV="${SIM_ENV:-BeyondMimic}"
 GVHMR_DEVICE="${GVHMR_DEVICE:-cuda}"
-RECORD_BACKEND="${RECORD_BACKEND:-viewport}"
+RECORD_BACKEND="${RECORD_BACKEND:-auto}"
 EXPORT_MP4="${EXPORT_MP4:-1}"
 CSV2NPZ_TIMEOUT="${CSV2NPZ_TIMEOUT:-1200}"
-if ! PYTHONPATH="/home/hiyio/HoloMotion/thirdparties/GVHMR:/home/hiyio/HoloMotion/holomotion/src:${PYTHONPATH:-}" \
+CSV2NPZ_LOCK_DIR="${CSV2NPZ_LOCK_DIR:-/tmp/whole_body_tracking_csv2npz_viewport.lock}"
+VIRTUAL_DISPLAY="${VIRTUAL_DISPLAY:-1}"
+VIRTUAL_DISPLAY_REQUIRED="${VIRTUAL_DISPLAY_REQUIRED:-0}"
+VIRTUAL_DISPLAY_NUM="${VIRTUAL_DISPLAY_NUM:-99}"
+VIRTUAL_DISPLAY_WHD="${VIRTUAL_DISPLAY_WHD:-1920x1080x24}"
+HEADLESS_FALLBACK_BACKEND="${HEADLESS_FALLBACK_BACKEND:-renderer}"
+
+# Force GVHMR stage to use whole_body_tracking's BeyondMimic env by default.
+if [[ -z "${GVHMR_ENV_FORCE_ALLOW:-}" ]]; then
+  GVHMR_ENV="BeyondMimic"
+fi
+
+case "$RECORD_BACKEND" in
+  auto|viewport|renderer) ;;
+  *)
+    echo "[WARN] Unsupported RECORD_BACKEND=$RECORD_BACKEND, falling back to auto"
+    RECORD_BACKEND="auto"
+    ;;
+esac
+if [[ "$HEADLESS_FALLBACK_BACKEND" != "renderer" ]]; then
+  echo "[WARN] Unsupported HEADLESS_FALLBACK_BACKEND=$HEADLESS_FALLBACK_BACKEND, forcing renderer"
+  HEADLESS_FALLBACK_BACKEND="renderer"
+fi
+if [[ "$EXPORT_MP4" != "1" ]]; then
+  echo "[WARN] Forcing EXPORT_MP4=1 because this workflow requires mp4 output."
+  EXPORT_MP4="1"
+fi
+if [[ "$USER_HEADLESS" == "1" ]]; then
+  echo "[INFO] User requested --headless; csv_to_npz stage will honor it when renderer/headless mode is selected."
+fi
+
+acquire_csv2npz_lock() {
+  local waited=0
+  while ! mkdir "$CSV2NPZ_LOCK_DIR" 2>/dev/null; do
+    if [[ -f "$CSV2NPZ_LOCK_DIR/pid" ]]; then
+      local holder_pid
+      holder_pid="$(cat "$CSV2NPZ_LOCK_DIR/pid" 2>/dev/null || true)"
+      if [[ -n "$holder_pid" && ! "$holder_pid" =~ ^[0-9]+$ ]]; then
+        holder_pid=""
+      fi
+      if [[ -n "$holder_pid" && ! -e "/proc/$holder_pid" ]]; then
+        echo "[LOCK] Removing stale csv_to_npz lock held by dead pid=$holder_pid"
+        rm -rf "$CSV2NPZ_LOCK_DIR"
+        continue
+      fi
+    fi
+    echo "[LOCK] Waiting for viewport csv_to_npz lock: $CSV2NPZ_LOCK_DIR (${waited}s)"
+    sleep 5
+    waited=$((waited + 5))
+  done
+  echo "$$" > "$CSV2NPZ_LOCK_DIR/pid"
+  date -Is > "$CSV2NPZ_LOCK_DIR/acquired_at"
+}
+
+cleanup_csv2npz_children() {
+  if [[ -n "${CSV2NPZ_PID:-}" ]]; then
+    kill -TERM "$CSV2NPZ_PID" 2>/dev/null || true
+    sleep 2
+    kill -KILL "$CSV2NPZ_PID" 2>/dev/null || true
+    pkill -TERM -P "$CSV2NPZ_PID" 2>/dev/null || true
+    sleep 1
+    pkill -KILL -P "$CSV2NPZ_PID" 2>/dev/null || true
+  fi
+}
+
+CSV2NPZ_DISPLAY_PID=""
+CSV2NPZ_DISPLAY_LOG=""
+
+csv2npz_display_ready() {
+  local display="${1:-${DISPLAY:-}}"
+  if [[ -z "$display" ]]; then
+    return 1
+  fi
+  DISPLAY="$display" xdpyinfo >/dev/null 2>&1
+}
+
+start_csv2npz_virtual_display() {
+  if csv2npz_display_ready "${DISPLAY:-}"; then
+    echo "[DISPLAY] Reusing existing display: ${DISPLAY}"
+    return 0
+  fi
+
+  if [[ "$VIRTUAL_DISPLAY" != "1" ]]; then
+    echo "[DISPLAY] Virtual display disabled (VIRTUAL_DISPLAY=$VIRTUAL_DISPLAY)"
+    return 1
+  fi
+
+  if ! command -v Xvfb >/dev/null 2>&1; then
+    echo "[DISPLAY] Xvfb not found; cannot start virtual display."
+    return 1
+  fi
+
+  local display=":${VIRTUAL_DISPLAY_NUM}"
+  local log="/tmp/whole_body_tracking_xvfb_${VIRTUAL_DISPLAY_NUM}.log"
+  rm -f "$log"
+
+  echo "[DISPLAY] Starting Xvfb on $display (screen=$VIRTUAL_DISPLAY_WHD)"
+  Xvfb "$display" -screen 0 "$VIRTUAL_DISPLAY_WHD" -nolisten tcp -ac +extension GLX +render -noreset >"$log" 2>&1 &
+  CSV2NPZ_DISPLAY_PID=$!
+  CSV2NPZ_DISPLAY_LOG="$log"
+
+  for _ in $(seq 1 40); do
+    if csv2npz_display_ready "$display"; then
+      export DISPLAY="$display"
+      echo "[DISPLAY] Xvfb ready on ${DISPLAY} (pid=${CSV2NPZ_DISPLAY_PID})"
+      return 0
+    fi
+    if ! kill -0 "$CSV2NPZ_DISPLAY_PID" 2>/dev/null; then
+      break
+    fi
+    sleep 0.25
+  done
+
+  echo "[DISPLAY] Xvfb failed to become ready on $display"
+  if [[ -f "$log" ]]; then
+    tail -n 80 "$log" || true
+  fi
+  stop_csv2npz_virtual_display
+  return 1
+}
+
+stop_csv2npz_virtual_display() {
+  if [[ -n "$CSV2NPZ_DISPLAY_PID" ]]; then
+    kill -TERM "$CSV2NPZ_DISPLAY_PID" 2>/dev/null || true
+    sleep 1
+    kill -KILL "$CSV2NPZ_DISPLAY_PID" 2>/dev/null || true
+    wait "$CSV2NPZ_DISPLAY_PID" 2>/dev/null || true
+    CSV2NPZ_DISPLAY_PID=""
+  fi
+}
+
+release_csv2npz_lock() {
+  if [[ -d "$CSV2NPZ_LOCK_DIR" ]] && [[ "$(cat "$CSV2NPZ_LOCK_DIR/pid" 2>/dev/null || true)" == "$$" ]]; then
+    rm -rf "$CSV2NPZ_LOCK_DIR"
+  fi
+}
+
+trap 'cleanup_csv2npz_children; stop_csv2npz_virtual_display; release_csv2npz_lock' EXIT
+
+if ! PYTHONNOUSERSITE=1 PYTHONPATH="/home/hiyio/HoloMotion/thirdparties/GVHMR:/home/hiyio/HoloMotion/holomotion/src:${PYTHONPATH:-}" \
   conda run -n "$GVHMR_ENV" python -c "import pytorch_lightning, ultralytics, colorlog, pytorch3d, hydra_zen, ffmpeg, wis3d, yacs, timm, pycolmap, smplx; from hmr4d.configs import register_store_gvhmr" >/dev/null 2>&1; then
-  echo "[WARN] Env '$GVHMR_ENV' missing GVHMR deps, fallback to 'gvhmr' for step 1."
-  GVHMR_ENV="gvhmr"
+  echo "[WARN] Env '$GVHMR_ENV' import check failed."
+  if [[ "$GVHMR_ENV" != "gvhmr" ]]; then
+    echo "[WARN] Falling back to 'gvhmr' only for step 1."
+    GVHMR_ENV="gvhmr"
+  fi
 fi
 run_gvhmr() {
   local dev="$1"
   echo "[GVHMR] device=$dev"
-  GVHMR_DEVICE="$dev" \
-  PYTHONPATH="/home/hiyio/HoloMotion/thirdparties/GVHMR:/home/hiyio/HoloMotion/holomotion/src:${PYTHONPATH:-}" \
-  YOLO_CONFIG_DIR="/tmp/Ultralytics" \
-  conda run -n "$GVHMR_ENV" python \
-    /home/hiyio/HoloMotion/holomotion/src/data_curation/video_to_smpl_gvhmr.py \
-    --video "$VIDEO" \
-    --output_root "$GVHMR_OUT" \
-    -s --no_render
+  env \
+    GVHMR_DEVICE="$dev" \
+    PYTHONNOUSERSITE=1 \
+    PYTHONPATH="/home/hiyio/HoloMotion/thirdparties/GVHMR:/home/hiyio/HoloMotion/holomotion/src:${PYTHONPATH:-}" \
+    YOLO_CONFIG_DIR="/tmp/Ultralytics" \
+    conda run -n "$GVHMR_ENV" python \
+      /home/hiyio/HoloMotion/holomotion/src/data_curation/video_to_smpl_gvhmr.py \
+      --video "$VIDEO" \
+      --output_root "$GVHMR_OUT" \
+      -s --no_render
 }
 
 if [[ "$GVHMR_DEVICE" == "cuda" ]]; then
@@ -149,59 +293,122 @@ fi
 echo "[5/5] CSV -> NPZ"
 run_csv_to_npz() {
   local backend="$1"
-  local headless_flag=()
   local record_flag=()
+  local app_flags=()
   local cmd=()
-  if [[ "$EXPORT_MP4" == "1" ]]; then
-    record_flag=(--record --record_backend "$backend")
-  fi
-  # Default behavior:
-  # - exporting mp4 => non-headless by default
-  # - unless user explicitly passes --headless to this wrapper script
-  # - when not exporting mp4 => keep headless
-  if [[ "$USER_HEADLESS" == "1" ]]; then
-    headless_flag=(--headless)
-  elif [[ "$EXPORT_MP4" != "1" ]]; then
-    headless_flag=(--headless)
-  fi
+  local mode="viewport"
+  local prev_display="${DISPLAY:-}"
 
-  cmd=(conda run -n "$SIM_ENV" python /home/hiyio/whole_body_tracking/scripts/csv_to_npz_local.py
+  acquire_csv2npz_lock
+
+  echo "[CSV2NPZ] Cleaning stale child processes from previous attempts"
+  pkill -f "python .*/csv_to_npz_local.py" 2>/dev/null || true
+  sleep 2
+
+  case "$backend" in
+    viewport)
+      if csv2npz_display_ready "${DISPLAY:-}" || start_csv2npz_virtual_display; then
+        mode="viewport"
+        record_flag=(--record --record_backend viewport)
+      else
+        if [[ "$VIRTUAL_DISPLAY_REQUIRED" == "1" ]]; then
+          echo "[CSV2NPZ] viewport requested but no real/virtual display is available."
+          stop_csv2npz_virtual_display
+          release_csv2npz_lock
+          return 1
+        fi
+        echo "[CSV2NPZ] viewport requested but no usable display is available; falling back to headless renderer."
+        mode="headless-renderer"
+        record_flag=(--record --record_backend "$HEADLESS_FALLBACK_BACKEND")
+        app_flags=(--headless --enable_cameras)
+      fi
+      ;;
+    renderer)
+      mode="headless-renderer"
+      record_flag=(--record --record_backend renderer)
+      app_flags=(--headless --enable_cameras)
+      ;;
+    auto|*)
+      if [[ "$USER_HEADLESS" == "1" ]]; then
+        echo "[CSV2NPZ] auto mode: --headless requested by user; using headless renderer."
+        mode="headless-renderer"
+        record_flag=(--record --record_backend "$HEADLESS_FALLBACK_BACKEND")
+        app_flags=(--headless --enable_cameras)
+      elif csv2npz_display_ready "${DISPLAY:-}" || start_csv2npz_virtual_display; then
+        mode="viewport"
+        record_flag=(--record --record_backend viewport)
+      else
+        echo "[CSV2NPZ] auto mode: no usable display found; using headless renderer fallback."
+        mode="headless-renderer"
+        record_flag=(--record --record_backend "$HEADLESS_FALLBACK_BACKEND")
+        app_flags=(--headless --enable_cameras)
+      fi
+      ;;
+  esac
+
+  echo "[CSV2NPZ] Launch mode: $mode"
+  echo "[CSV2NPZ] DISPLAY=${DISPLAY:-<unset>}"
+
+  cmd=(env PYTHONNOUSERSITE=1 conda run -n "$SIM_ENV" python /home/hiyio/whole_body_tracking/scripts/csv_to_npz_local.py
     --input_file "$CSV_FILE"
     --input_fps 30 --output_fps 50
     --output_dir "$NPZ_OUT"
     --output_name "$VIDEO_NAME"
     "${record_flag[@]}"
-    "${headless_flag[@]}")
+    "${app_flags[@]}")
 
+  echo "[CSV2NPZ] Command: ${cmd[*]}"
   set +e
-  timeout --signal=TERM "$CSV2NPZ_TIMEOUT" "${cmd[@]}"
+  timeout --foreground --signal=TERM --kill-after=20s "$CSV2NPZ_TIMEOUT" "${cmd[@]}" &
+  CSV2NPZ_PID=$!
+  wait "$CSV2NPZ_PID"
   local rc=$?
+  CSV2NPZ_PID=""
   set -e
+
+  if [[ $rc -eq 124 || $rc -eq 137 ]]; then
+    echo "[CSV2NPZ] Timed out / killed, cleaning child processes"
+    cleanup_csv2npz_children
+    pkill -f "python .*/csv_to_npz_local.py" 2>/dev/null || true
+    sleep 2
+  fi
+
+  stop_csv2npz_virtual_display
+  if [[ -n "$prev_display" ]]; then
+    export DISPLAY="$prev_display"
+  else
+    unset DISPLAY || true
+  fi
+
+  release_csv2npz_lock
   return $rc
 }
 
 NPZ_FILE="${NPZ_OUT}/${VIDEO_NAME}.npz"
+MP4_FILE="${NPZ_OUT}/${VIDEO_NAME}.mp4"
 CSV2NPZ_RC=0
-if ! run_csv_to_npz "$RECORD_BACKEND"; then
-  CSV2NPZ_RC=$?
-fi
+set +e
+run_csv_to_npz "$RECORD_BACKEND"
+CSV2NPZ_RC=$?
+set -e
 
+if [[ $CSV2NPZ_RC -ne 0 ]]; then
+  echo "[WARN] CSV->NPZ first attempt failed rc=${CSV2NPZ_RC}."
+fi
 if [[ $CSV2NPZ_RC -ne 0 && -f "$NPZ_FILE" ]]; then
   echo "[WARN] CSV->NPZ exited rc=${CSV2NPZ_RC}, but NPZ exists, continue."
 fi
 
-if [[ ! -f "$NPZ_FILE" ]]; then
-  if [[ "$EXPORT_MP4" == "1" && "$RECORD_BACKEND" != "renderer" ]]; then
-    echo "[WARN] CSV->NPZ failed (rc=${CSV2NPZ_RC}), retry once with renderer backend."
-    CSV2NPZ_RC=0
-    if ! run_csv_to_npz "renderer"; then
-      CSV2NPZ_RC=$?
-    fi
-  fi
+if [[ ! -f "$NPZ_FILE" || ! -f "$MP4_FILE" ]]; then
+  echo "[WARN] Missing output after first pass; retrying exactly once in auto mode (display if available, otherwise headless renderer fallback)."
+  set +e
+  run_csv_to_npz "auto"
+  CSV2NPZ_RC=$?
+  set -e
 fi
 
 if [[ $CSV2NPZ_RC -ne 0 && -f "$NPZ_FILE" ]]; then
-  echo "[WARN] CSV->NPZ retry exited rc=${CSV2NPZ_RC}, but NPZ exists, continue."
+  echo "[WARN] CSV->NPZ retry exited rc=${CSV2NPZ_RC}, but NPZ exists."
 fi
 
 if [[ ! -f "$NPZ_FILE" ]]; then
@@ -209,10 +416,9 @@ if [[ ! -f "$NPZ_FILE" ]]; then
   exit 1
 fi
 
-MP4_FILE="${NPZ_OUT}/${VIDEO_NAME}.mp4"
-if [[ "$EXPORT_MP4" == "1" && ! -f "$MP4_FILE" ]]; then
-  echo "[WARN] MP4 not found after first pass. Retrying with viewport backend (non-headless)."
-  run_csv_to_npz "viewport" || true
+if [[ ! -f "$MP4_FILE" ]]; then
+  echo "CSV->NPZ finished but MP4 not found: $MP4_FILE"
+  exit 1
 fi
 
 # Convenience link at bundle root
