@@ -30,6 +30,19 @@ MAGICBOT_Z1_TRACKING_BODY_NAMES = [
     "right_wrist_yaw_link",
 ]
 
+MAGICBOT_Z1_REWARD_BODY_NAMES = [
+    body_name
+    for body_name in MAGICBOT_Z1_TRACKING_BODY_NAMES
+    if body_name not in {"left_ankle_roll_link", "right_ankle_roll_link"}
+]
+
+MAGICBOT_Z1_EXCLUDED_COMMAND_JOINT_NAMES = [
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+]
+
 MAGICBOT_Z1_UNDESIRED_CONTACT_REGEX = [
     (
         r"^(?!left_ankle_roll_link$)(?!right_ankle_roll_link$)"
@@ -43,6 +56,17 @@ def _apply_magicbot_z1_overrides(env_cfg) -> None:
     env_cfg.actions.joint_pos.scale = MAGICBOT_Z1_ACTION_SCALE
     env_cfg.commands.motion.anchor_body_name = "torso_link"
     env_cfg.commands.motion.body_names = list(MAGICBOT_Z1_TRACKING_BODY_NAMES)
+    env_cfg.commands.motion.reset_exclude_joint_names = list(MAGICBOT_Z1_EXCLUDED_COMMAND_JOINT_NAMES)
+    env_cfg.observations.policy.command.func = mdp.generated_commands_filtered
+    env_cfg.observations.policy.command.params["exclude_joint_names"] = list(MAGICBOT_Z1_EXCLUDED_COMMAND_JOINT_NAMES)
+    env_cfg.observations.critic.command.func = mdp.generated_commands_filtered
+    env_cfg.observations.critic.command.params["exclude_joint_names"] = list(MAGICBOT_Z1_EXCLUDED_COMMAND_JOINT_NAMES)
+    # Motion rewards ignore ankle links because the foot pose data is noisy and
+    # otherwise turns into an implicit ankle-angle imitation target.
+    env_cfg.rewards.motion_body_pos.params["body_names"] = list(MAGICBOT_Z1_REWARD_BODY_NAMES)
+    env_cfg.rewards.motion_body_ori.params["body_names"] = list(MAGICBOT_Z1_REWARD_BODY_NAMES)
+    env_cfg.rewards.motion_body_lin_vel.params["body_names"] = list(MAGICBOT_Z1_REWARD_BODY_NAMES)
+    env_cfg.rewards.motion_body_ang_vel.params["body_names"] = list(MAGICBOT_Z1_REWARD_BODY_NAMES)
     env_cfg.commands.motion.ground_reference_on_reset = True
     env_cfg.commands.motion.ground_reference_clearance = 0.02
     env_cfg.rewards.undesired_contacts.params["sensor_cfg"] = SceneEntityCfg(

@@ -215,6 +215,22 @@ class MotionCommand(CommandTerm):
         self.body_indexes = torch.tensor(
             self.robot.find_bodies(self.cfg.body_names, preserve_order=True)[0], dtype=torch.long, device=self.device
         )
+        reset_exclude_joint_names = list(getattr(self.cfg, "reset_exclude_joint_names", []) or [])
+        if reset_exclude_joint_names:
+            joint_index_by_name = {name: idx for idx, name in enumerate(self.robot.joint_names)}
+            missing_joint_names = [name for name in reset_exclude_joint_names if name not in joint_index_by_name]
+            if missing_joint_names:
+                raise ValueError(
+                    f"reset_exclude_joint_names contains joints not present on robot {cfg.asset_name}: "
+                    f"{missing_joint_names}"
+                )
+            self._reset_exclude_joint_ids = torch.tensor(
+                [joint_index_by_name[name] for name in reset_exclude_joint_names],
+                dtype=torch.long,
+                device=self.device,
+            )
+        else:
+            self._reset_exclude_joint_ids = None
 
         motion_files = list(getattr(self.cfg, "motion_files", []) or [])
         if not motion_files:
@@ -536,6 +552,10 @@ class MotionCommand(CommandTerm):
         joint_vel = self.joint_vel[env_ids].clone()
 
         joint_pos += sample_uniform(*self.cfg.joint_position_range, joint_pos.shape, joint_pos.device)
+        if self._reset_exclude_joint_ids is not None and self._reset_exclude_joint_ids.numel() > 0:
+            default_joint_pos = self.robot.data.default_joint_pos[env_ids]
+            joint_pos[:, self._reset_exclude_joint_ids] = default_joint_pos[:, self._reset_exclude_joint_ids]
+            joint_vel[:, self._reset_exclude_joint_ids] = 0.0
         soft_joint_pos_limits = self.robot.data.soft_joint_pos_limits[env_ids]
         joint_pos = torch.clip(joint_pos, soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1])
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
@@ -695,6 +715,7 @@ class MotionCommandCfg(CommandTermCfg):
     velocity_range: dict[str, tuple[float, float]] = {}
 
     joint_position_range: tuple[float, float] = (-0.52, 0.52)
+    reset_exclude_joint_names: list[str] | None = None
 
     adaptive_kernel_size: int = 1
     adaptive_lambda: float = 0.8
