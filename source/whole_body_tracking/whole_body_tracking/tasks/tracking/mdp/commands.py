@@ -27,37 +27,179 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
+def _npz_name_list(data: np.lib.npyio.NpzFile, key: str) -> list[str] | None:
+    if key not in data:
+        return None
+    values = np.asarray(data[key])
+    if values.ndim == 0:
+        return [str(values.item())]
+    return [str(v) for v in values.tolist()]
+
+
 class MotionLoader:
-    def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu"):
+    def __init__(
+        self,
+        motion_file: str,
+        body_indexes: Sequence[int] | None,
+        device: str = "cpu",
+        expected_joint_names: Sequence[str] | None = None,
+        target_body_names: Sequence[str] | None = None,
+    ):
         assert os.path.isfile(motion_file), f"Invalid file path: {motion_file}"
-        data = np.load(motion_file)
-        fps = data["fps"]
-        if isinstance(fps, np.ndarray):
-            fps = fps.item() if fps.size == 1 else float(fps.flatten()[0])
-        self.fps = float(fps)
-        self.joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
-        self.joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
-        self._body_pos_w = torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device)
-        self._body_quat_w = torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device)
-        self._body_lin_vel_w = torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device)
-        self._body_ang_vel_w = torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device)
-        self._body_indexes = body_indexes
+        with np.load(motion_file, allow_pickle=True) as data:
+            fps = data["fps"]
+            if isinstance(fps, np.ndarray):
+                fps = fps.item() if fps.size == 1 else float(fps.flatten()[0])
+            self.fps = float(fps)
+
+            motion_joint_names = _npz_name_list(data, "joint_names")
+            motion_body_names = _npz_name_list(data, "body_names")
+
+            joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
+            joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
+            self.joint_pos, self.joint_vel = self._resolve_joint_data(
+                joint_pos,
+                joint_vel,
+                expected_joint_names=expected_joint_names,
+                motion_joint_names=motion_joint_names,
+                motion_file=motion_file,
+            )
+
+            body_tensors = [
+                torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device),
+                torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device),
+                torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device),
+                torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device),
+            ]
+            (
+                self._body_pos_w,
+                self._body_quat_w,
+                self._body_lin_vel_w,
+                self._body_ang_vel_w,
+                self._body_indexes,
+            ) = self._resolve_body_data(
+                body_tensors,
+                body_indexes=body_indexes,
+                target_body_names=target_body_names,
+                motion_body_names=motion_body_names,
+                motion_file=motion_file,
+            )
         self.time_step_total = self.joint_pos.shape[0]
+
+    @staticmethod
+    def _resolve_joint_data(
+        joint_pos: torch.Tensor,
+        joint_vel: torch.Tensor,
+        expected_joint_names: Sequence[str] | None,
+        motion_joint_names: Sequence[str] | None,
+        motion_file: str,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if expected_joint_names is None:
+            return joint_pos, joint_vel
+
+        expected_joint_names = list(expected_joint_names)
+
+        if motion_joint_names is not None:
+            if joint_pos.shape[1] != len(motion_joint_names):
+                raise ValueError(
+                    f"joint_names metadata length mismatch in {motion_file}: "
+                    f"{len(motion_joint_names)} names vs joint_pos dim {joint_pos.shape[1]}"
+                )
+            motion_index_by_name = {name: idx for idx, name in enumerate(motion_joint_names)}
+            missing = [name for name in expected_joint_names if name not in motion_index_by_name]
+            if missing:
+                raise ValueError(
+                    f"Motion joint_names in {motion_file} are missing required joints: {missing}. "
+                    "Regenerate the motion with the updated robot model."
+                )
+            remapped_joint_pos = torch.zeros((joint_pos.shape[0], len(expected_joint_names)), dtype=joint_pos.dtype, device=joint_pos.device)
+            remapped_joint_vel = torch.zeros_like(remapped_joint_pos)
+            for dst_idx, name in enumerate(expected_joint_names):
+                src_idx = motion_index_by_name[name]
+                remapped_joint_pos[:, dst_idx] = joint_pos[:, src_idx]
+                remapped_joint_vel[:, dst_idx] = joint_vel[:, src_idx]
+            return remapped_joint_pos, remapped_joint_vel
+
+        if joint_pos.shape[1] == len(expected_joint_names):
+            return joint_pos, joint_vel
+
+        raise ValueError(
+            f"Motion joint_pos dim mismatch for {motion_file}: expected {len(expected_joint_names)}, "
+            f"got {joint_pos.shape[1]}. Regenerate the motion with the updated robot model."
+        )
+
+    @staticmethod
+    def _resolve_body_data(
+        body_tensors: list[torch.Tensor],
+        body_indexes: Sequence[int] | None,
+        target_body_names: Sequence[str] | None,
+        motion_body_names: Sequence[str] | None,
+        motion_file: str,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
+        body_pos_w, body_quat_w, body_lin_vel_w, body_ang_vel_w = body_tensors
+        raw_body_count = body_pos_w.shape[1]
+
+        if motion_body_names is not None:
+            if raw_body_count != len(motion_body_names):
+                raise ValueError(
+                    f"body_names metadata length mismatch in {motion_file}: "
+                    f"{len(motion_body_names)} names vs body_pos_w dim {raw_body_count}"
+                )
+            if target_body_names is not None:
+                motion_index_by_name = {name: idx for idx, name in enumerate(motion_body_names)}
+                missing = [name for name in target_body_names if name not in motion_index_by_name]
+                if missing:
+                    raise ValueError(
+                        f"Motion body_names in {motion_file} are missing required bodies: {missing}. "
+                        "Regenerate the motion with the updated robot model."
+                    )
+                select_ids = [motion_index_by_name[name] for name in target_body_names]
+                return (
+                    body_pos_w[:, select_ids],
+                    body_quat_w[:, select_ids],
+                    body_lin_vel_w[:, select_ids],
+                    body_ang_vel_w[:, select_ids],
+                    None,
+                )
+            return body_pos_w, body_quat_w, body_lin_vel_w, body_ang_vel_w, None
+
+        if target_body_names is not None and raw_body_count == len(target_body_names):
+            return body_pos_w, body_quat_w, body_lin_vel_w, body_ang_vel_w, None
+
+        if body_indexes is None:
+            return body_pos_w, body_quat_w, body_lin_vel_w, body_ang_vel_w, None
+
+        body_indexes = torch.as_tensor(body_indexes, dtype=torch.long, device=body_pos_w.device)
+        if body_indexes.numel() and int(body_indexes.max().item()) >= raw_body_count:
+            raise ValueError(
+                f"Motion body_pos_w dim mismatch for {motion_file}: requested body index "
+                f"{int(body_indexes.max().item())}, but body_pos_w only has {raw_body_count} bodies. "
+                "Regenerate the motion with scripts/csv_to_npz_local.py so body_names metadata is saved."
+            )
+        return body_pos_w, body_quat_w, body_lin_vel_w, body_ang_vel_w, body_indexes
 
     @property
     def body_pos_w(self) -> torch.Tensor:
+        if self._body_indexes is None:
+            return self._body_pos_w
         return self._body_pos_w[:, self._body_indexes]
 
     @property
     def body_quat_w(self) -> torch.Tensor:
+        if self._body_indexes is None:
+            return self._body_quat_w
         return self._body_quat_w[:, self._body_indexes]
 
     @property
     def body_lin_vel_w(self) -> torch.Tensor:
+        if self._body_indexes is None:
+            return self._body_lin_vel_w
         return self._body_lin_vel_w[:, self._body_indexes]
 
     @property
     def body_ang_vel_w(self) -> torch.Tensor:
+        if self._body_indexes is None:
+            return self._body_ang_vel_w
         return self._body_ang_vel_w[:, self._body_indexes]
 
 
@@ -81,7 +223,16 @@ class MotionCommand(CommandTerm):
             if not os.path.isfile(motion_file):
                 raise FileNotFoundError(f"Invalid motion file path: {motion_file}")
 
-        self.motions = [MotionLoader(motion_file, self.body_indexes, device=self.device) for motion_file in motion_files]
+        self.motions = [
+            MotionLoader(
+                motion_file,
+                self.body_indexes,
+                device=self.device,
+                expected_joint_names=self.robot.joint_names,
+                target_body_names=self.cfg.body_names,
+            )
+            for motion_file in motion_files
+        ]
         self.motion = self.motions[0]
         self.motion_count = len(self.motions)
         self.time_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
@@ -89,6 +240,7 @@ class MotionCommand(CommandTerm):
         self.body_pos_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 3, device=self.device)
         self.body_quat_relative_w = torch.zeros(self.num_envs, len(cfg.body_names), 4, device=self.device)
         self.body_quat_relative_w[:, :, 0] = 1.0
+        self._ground_reference_z_offset = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
 
         ref_joint_shape = self.motion.joint_pos.shape[1:]
         ref_body_shape = self.motion.body_pos_w.shape[1:]
@@ -198,7 +350,11 @@ class MotionCommand(CommandTerm):
 
     @property
     def body_pos_w(self) -> torch.Tensor:
-        return self._gather_motion_attr("body_pos_w") + self._env.scene.env_origins[:, None, :]
+        body_pos_w = self._gather_motion_attr("body_pos_w") + self._env.scene.env_origins[:, None, :]
+        if bool(getattr(self.cfg, "ground_reference_on_reset", False)):
+            body_pos_w = body_pos_w.clone()
+            body_pos_w[:, :, 2] -= self._ground_reference_z_offset[:, None]
+        return body_pos_w
 
     @property
     def body_quat_w(self) -> torch.Tensor:
@@ -349,10 +505,20 @@ class MotionCommand(CommandTerm):
             self.motion_ids[env_ids] = self._sample_motion_ids(len(env_ids))
         self._adaptive_sampling(env_ids)
 
-        root_pos = self.body_pos_w[:, 0].clone()
+        motion_body_pos_w = self._gather_motion_attr("body_pos_w") + self._env.scene.env_origins[:, None, :]
+        root_pos = motion_body_pos_w[:, 0].clone()
         root_ori = self.body_quat_w[:, 0].clone()
         root_lin_vel = self.body_lin_vel_w[:, 0].clone()
         root_ang_vel = self.body_ang_vel_w[:, 0].clone()
+
+        if bool(getattr(self.cfg, "ground_reference_on_reset", False)):
+            clearance = float(getattr(self.cfg, "ground_reference_clearance", 0.0) or 0.0)
+            body_z = motion_body_pos_w[env_ids, :, 2]
+            min_body_z = body_z.min(dim=1).values
+            self._ground_reference_z_offset[env_ids] = min_body_z - clearance
+            root_pos[env_ids, 2] -= self._ground_reference_z_offset[env_ids]
+        else:
+            self._ground_reference_z_offset[env_ids] = 0.0
 
         range_list = [self.cfg.pose_range.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
         ranges = torch.tensor(range_list, device=self.device)
@@ -366,15 +532,13 @@ class MotionCommand(CommandTerm):
         root_lin_vel[env_ids] += rand_samples[:, :3]
         root_ang_vel[env_ids] += rand_samples[:, 3:]
 
-        joint_pos = self.joint_pos.clone()
-        joint_vel = self.joint_vel.clone()
+        joint_pos = self.joint_pos[env_ids].clone()
+        joint_vel = self.joint_vel[env_ids].clone()
 
         joint_pos += sample_uniform(*self.cfg.joint_position_range, joint_pos.shape, joint_pos.device)
         soft_joint_pos_limits = self.robot.data.soft_joint_pos_limits[env_ids]
-        joint_pos[env_ids] = torch.clip(
-            joint_pos[env_ids], soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1]
-        )
-        self.robot.write_joint_state_to_sim(joint_pos[env_ids], joint_vel[env_ids], env_ids=env_ids)
+        joint_pos = torch.clip(joint_pos, soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1])
+        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
         self.robot.write_root_state_to_sim(
             torch.cat([root_pos[env_ids], root_ori[env_ids], root_lin_vel[env_ids], root_ang_vel[env_ids]], dim=-1),
             env_ids=env_ids,
@@ -541,6 +705,9 @@ class MotionCommandCfg(CommandTermCfg):
     # Random pause to freeze the current motion frame (seconds).
     random_pause_prob: float = 0.0
     random_pause_duration_s: tuple[float, float] = (0.0, 0.0)
+    # When enabled, shift root z on reset so the lowest tracked body starts at ground level.
+    ground_reference_on_reset: bool = False
+    ground_reference_clearance: float = 0.0
 
     anchor_visualizer_cfg: VisualizationMarkersCfg = FRAME_MARKER_CFG.replace(prim_path="/Visuals/Command/pose")
     anchor_visualizer_cfg.markers["frame"].scale = (0.2, 0.2, 0.2)
