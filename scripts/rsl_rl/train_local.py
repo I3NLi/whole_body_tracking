@@ -46,6 +46,7 @@ python scripts/rsl_rl/train_local.py \
 
 # ---------- Launch Isaac Sim Simulator first ----------
 import argparse
+import importlib.metadata as metadata
 import sys
 import shutil
 import glob
@@ -111,6 +112,8 @@ simulation_app = app_launcher.app
 # ---------- Rest everything follows ----------
 import gymnasium as gym
 import os
+import numpy as np
+import pickle
 import torch
 from datetime import datetime
 
@@ -122,8 +125,12 @@ from isaaclab.envs import (
     multi_agent_to_single_agent,
 )
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle, dump_yaml
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from isaaclab.utils.io import dump_yaml
+from isaaclab_rl.rsl_rl import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlVecEnvWrapper,
+    handle_deprecated_rsl_rl_cfg,
+)
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
@@ -131,6 +138,28 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import whole_body_tracking.tasks  # noqa: F401
 # 使用你本地仅保存版本的 Runner
 from whole_body_tracking.utils.my_on_policy_runner_local import MotionOnPolicyRunner as OnPolicyRunner
+
+
+def dump_pickle(filename: str, data) -> None:
+    with open(filename, "wb") as f:
+        pickle.dump(data, f)
+
+
+def _get_installed_rsl_rl_version() -> str:
+    for package_name in ("rsl-rl-lib", "rsl_rl_lib", "rsl-rl"):
+        try:
+            return metadata.version(package_name)
+        except metadata.PackageNotFoundError:
+            continue
+    try:
+        import rsl_rl
+
+        return getattr(rsl_rl, "__version__", "0.0.0")
+    except Exception:
+        return "0.0.0"
+
+
+INSTALLED_RSL_RL_VERSION = _get_installed_rsl_rl_version()
 
 # cuDNN / TF32 设置
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -158,9 +187,35 @@ def _resolve_motion_files(args_cli: argparse.Namespace) -> list[str]:
     if args_cli.motion_dir:
         if not os.path.isdir(args_cli.motion_dir):
             raise FileNotFoundError(f"Motion dir not found: {args_cli.motion_dir}")
-        files.extend(sorted(glob.glob(os.path.join(args_cli.motion_dir, "*.npz"))))
-        if not files:
-            files.extend(sorted(glob.glob(os.path.join(args_cli.motion_dir, "**", "*.npz"), recursive=True)))
+        top_level_candidates = sorted(glob.glob(os.path.join(args_cli.motion_dir, "*.npz")))
+        top_level_files = [p for p in top_level_candidates if os.path.isfile(p)]
+        broken_top_level = [p for p in top_level_candidates if not os.path.isfile(p)]
+        if broken_top_level:
+            print(
+                f"[WARN] Ignoring {len(broken_top_level)} broken top-level motion link(s) under {args_cli.motion_dir}."
+            )
+
+        files.extend(top_level_files)
+        if not top_level_files:
+            # Prefer finalized motion exports under each motion folder's npz/ subdirectory.
+            recursive_npz_files = sorted(
+                glob.glob(os.path.join(args_cli.motion_dir, "**", "npz", "*.npz"), recursive=True)
+            )
+            recursive_npz_files = [p for p in recursive_npz_files if os.path.isfile(p)]
+            if recursive_npz_files:
+                files.extend(recursive_npz_files)
+            else:
+                recursive_candidates = sorted(
+                    glob.glob(os.path.join(args_cli.motion_dir, "**", "*.npz"), recursive=True)
+                )
+                recursive_files = [
+                    p
+                    for p in recursive_candidates
+                    if os.path.isfile(p)
+                    and f"{os.sep}gvhmr{os.sep}" not in p
+                    and os.path.basename(p) not in {"smpl.npz", "smplx.npz"}
+                ]
+                files.extend(recursive_files)
 
     # expand any glob patterns
     expanded: list[str] = []
@@ -188,6 +243,37 @@ def _resolve_motion_files(args_cli: argparse.Namespace) -> list[str]:
         raise FileNotFoundError(f"Motion file(s) not found: {missing}")
 
     return deduped
+
+
+def _expected_joint_dims_for_task(task_name: str) -> tuple[tuple[int, ...] | None, str | None]:
+    if "MagicBot-Z1" in task_name:
+        return (24,), "MagicBot-Z1"
+    if "Tracking-Flat-G1" in task_name:
+        return (29,), "G1"
+    return None, None
+
+
+def _validate_motion_files_for_task(task_name: str, motion_files: list[str]) -> None:
+    expected_joint_dims, robot_label = _expected_joint_dims_for_task(task_name)
+    if expected_joint_dims is None:
+        return
+
+    mismatches: list[str] = []
+    for motion_path in motion_files:
+        with np.load(motion_path) as motion_data:
+            if "joint_pos" not in motion_data:
+                raise KeyError(f"Motion file is missing joint_pos: {motion_path}")
+            actual_joint_dim = int(motion_data["joint_pos"].shape[1])
+        if actual_joint_dim not in expected_joint_dims:
+            mismatches.append(f"{os.path.basename(motion_path)}={actual_joint_dim}")
+
+    if mismatches:
+        expected_str = ", ".join(str(dim) for dim in expected_joint_dims)
+        raise ValueError(
+            f"Motion DOF mismatch for task={task_name} ({robot_label}). "
+            f"Expected joint_pos dim in {{{expected_str}}}, but got {', '.join(mismatches)}. "
+            "Pick the matching task for the robot motion."
+        )
 
 
 def _fill_beyond_mimic_config_from_env(env, yaml_path: str, onnx_path: str | None = None) -> None:
@@ -226,11 +312,74 @@ def _fill_beyond_mimic_config_from_env(env, yaml_path: str, onnx_path: str | Non
         print(f"[WARN] Failed to write BeyondMimic config with kp/kd: {e}")
 
 
+def _convert_legacy_rsl_rl_checkpoint(runner, loaded_dict: dict) -> dict:
+    """Translate legacy rsl-rl checkpoints into the split actor/critic format used by newer releases."""
+    legacy_model_state = loaded_dict["model_state_dict"]
+
+    actor_state = runner.alg.actor.state_dict()
+    critic_state = runner.alg.critic.state_dict()
+
+    for key, value in legacy_model_state.items():
+        if key == "std":
+            actor_state["distribution.std_param"] = value
+        elif key == "log_std":
+            actor_state["distribution.log_std_param"] = value
+        elif key.startswith("actor."):
+            actor_state[f"mlp.{key[len('actor.') :]}"] = value
+        elif key.startswith("critic."):
+            critic_state[f"mlp.{key[len('critic.') :]}"] = value
+
+    obs_norm_state = loaded_dict.get("obs_norm_state_dict")
+    if obs_norm_state is not None and any(name.startswith("obs_normalizer.") for name in actor_state):
+        for key, value in obs_norm_state.items():
+            actor_state[f"obs_normalizer.{key}"] = value
+
+    privileged_obs_norm_state = loaded_dict.get("privileged_obs_norm_state_dict", obs_norm_state)
+    if privileged_obs_norm_state is not None and any(name.startswith("obs_normalizer.") for name in critic_state):
+        for key, value in privileged_obs_norm_state.items():
+            critic_state[f"obs_normalizer.{key}"] = value
+
+    converted = {
+        "actor_state_dict": actor_state,
+        "critic_state_dict": critic_state,
+        "iter": loaded_dict.get("iter", 0),
+        "infos": loaded_dict.get("infos"),
+    }
+    if "optimizer_state_dict" in loaded_dict:
+        converted["optimizer_state_dict"] = loaded_dict["optimizer_state_dict"]
+    if "rnd_state_dict" in loaded_dict:
+        converted["rnd_state_dict"] = loaded_dict["rnd_state_dict"]
+    if "rnd_optimizer_state_dict" in loaded_dict:
+        converted["rnd_optimizer_state_dict"] = loaded_dict["rnd_optimizer_state_dict"]
+
+    return converted
+
+
+def _load_checkpoint_compat(runner, path: str):
+    """Load both new-format and legacy rsl-rl checkpoints."""
+    loaded_dict = torch.load(path, map_location="cpu", weights_only=False)
+
+    if "actor_state_dict" in loaded_dict and "critic_state_dict" in loaded_dict:
+        return runner.load(path, map_location="cpu")
+
+    if "model_state_dict" not in loaded_dict:
+        raise KeyError(f"Unsupported checkpoint format: missing actor/critic state dicts in {path}")
+
+    print("[WARN] Detected legacy rsl-rl checkpoint format. Converting for current runner.")
+    converted_dict = _convert_legacy_rsl_rl_checkpoint(runner, loaded_dict)
+    load_iteration = runner.alg.load(converted_dict, load_cfg=None, strict=True)
+    if load_iteration:
+        runner.current_learning_iteration = converted_dict["iter"]
+    return converted_dict.get("infos")
+
+
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: RslRlOnPolicyRunnerCfg):
     """Train with RSL-RL agent (local-only)."""
-    # override configurations with non-hydra CLI arguments
-    agent_cfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
+    # Align with the current IsaacLab local playback path: parse the runner config through
+    # cli_args instead of relying on older isaaclab_rl compatibility helpers.
+    agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
+    agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, INSTALLED_RSL_RL_VERSION)
 
     # env count / iterations
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
@@ -244,6 +393,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # --------- Local motion file only ---------
     motion_files = _resolve_motion_files(args_cli)
+    _validate_motion_files_for_task(args_cli.task, motion_files)
     env_cfg.commands.motion.motion_files = motion_files
     env_cfg.commands.motion.motion_file = motion_files[0]
     if args_cli.motion_rounds is not None and args_cli.motion_rounds <= 0:
@@ -275,9 +425,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
 
     # log_dir = {YYYY-mm-dd_HH-MM-SS}_{run_name}
+    # Even when resuming from an explicit checkpoint path, start a fresh run
+    # directory for cleaner bookkeeping while loading weights from the old run.
     log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     if agent_cfg.run_name:
         log_dir += f"_{agent_cfg.run_name}"
+    if getattr(agent_cfg, "resume", False) and args_cli.resume_path:
+        resume_stem = os.path.splitext(os.path.basename(args_cli.resume_path))[0]
+        log_dir += f"_resume-{resume_stem}"
+        print(f"[INFO] Resuming from checkpoint into new log directory: {log_dir}")
     log_dir = os.path.join(log_root_path, log_dir)
 
     # create log directory before copy
@@ -345,7 +501,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env = multi_agent_to_single_agent(env)
 
     # RSL-RL VecEnv wrapper
-    env = RslRlVecEnvWrapper(env)
+    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     # --------- Runner (local-only saver) ---------
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
@@ -364,18 +520,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         # resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
         resume_path = args_cli.resume_path
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-        try:
-            runner.load(resume_path)
-        except KeyError as e:
-            # Backward compatibility: older checkpoints may not contain obs_norm_state_dict.
-            if "obs_norm_state_dict" not in str(e):
-                raise
-            print("[WARN] Checkpoint missing obs_norm_state_dict. Falling back to legacy load path.")
-            loaded_dict = torch.load(resume_path, map_location=runner.device)
-            runner.alg.actor_critic.load_state_dict(loaded_dict["model_state_dict"])
-            runner.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
-            runner.current_learning_iteration = loaded_dict.get("iter", 0)
-            runner.last_learning_iteration = runner.current_learning_iteration
+        _load_checkpoint_compat(runner, resume_path)
 
     # persist configs
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
