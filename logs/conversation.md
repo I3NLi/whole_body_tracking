@@ -64,3 +64,8 @@ Report for 09:00 CST
 [2026-03-06 11:01:21 CST] Cron: 双训练进度与评估报告（whole_body_tracking + LeggedLab）。已执行本次巡检并输出报告。
 [2026-03-07 02:03:03 CST] Cron训练监控：检查 BeyondMimic/Tracking-Flat-G1-Wo-State-Estimation-v0 与 LeggedLab g1_flat 运行状态/ckpt/评估。
 [2026-03-07 02:03:09 CST] Cron训练监控：检查 BeyondMimic/Tracking-Flat-G1-Wo-State-Estimation-v0 与 LeggedLab g1_flat 运行状态/ckpt/评估。
+
+### 2026-03-08 09:30 Training Monitor Report
+- G1-Flat: Stopped (Mar 5)
+- g1_flat: Stopped (Mar 2)
+- Lexiang-Flat: Running (PID 671386), ~2960 step/h

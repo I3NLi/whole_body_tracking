@@ -9,8 +9,33 @@ from rsl_rl.runners.on_policy_runner import OnPolicyRunner
 
 from isaaclab_rl.rsl_rl import export_policy_as_onnx
 
-import wandb
+try:
+    import wandb
+except Exception:  # pragma: no cover
+    wandb = None
+
 from whole_body_tracking.utils.exporter import attach_onnx_metadata, export_motion_policy_as_onnx
+
+
+def _get_policy_module(alg):
+    if hasattr(alg, "get_policy"):
+        return alg.get_policy()
+    if hasattr(alg, "policy"):
+        return alg.policy
+    raise AttributeError("Algorithm has neither get_policy() nor policy attribute.")
+
+
+def _is_wandb_logging_enabled(runner: OnPolicyRunner) -> bool:
+    logger_type = getattr(runner, "logger_type", None)
+    if not isinstance(logger_type, str):
+        logger = getattr(runner, "logger", None)
+        logger_type = getattr(logger, "logger_type", None)
+    return (
+        isinstance(logger_type, str)
+        and logger_type.lower() == "wandb"
+        and wandb is not None
+        and getattr(wandb, "run", None) is not None
+    )
 
 
 class MyOnPolicyRunner(OnPolicyRunner):
@@ -20,11 +45,20 @@ class MyOnPolicyRunner(OnPolicyRunner):
 
         policy_path = path.split("model")[0]
         filename = policy_path.split("/")[-2] + ".onnx"
-        export_policy_as_onnx(self.alg.policy, normalizer=self.obs_normalizer, path=policy_path, filename=filename)
+        try:
+            export_policy_as_onnx(
+                _get_policy_module(self.alg),
+                normalizer=getattr(self, "obs_normalizer", None),
+                path=policy_path,
+                filename=filename,
+            )
+        except Exception as e:
+            print(f"[WARN] ONNX export skipped for {filename}: {e}")
+            return
 
-        if self.logger_type in ["wandb"]:
+        if _is_wandb_logging_enabled(self):
             attach_onnx_metadata(self.env.unwrapped, wandb.run.name, path=policy_path, filename=filename)
-            wandb.save(policy_path + filename, base_path=os.path.dirname(policy_path))
+            wandb.save(os.path.join(policy_path, filename), base_path=os.path.dirname(policy_path))
         else: 
             attach_onnx_metadata(self.env.unwrapped, "local", path=policy_path, filename=filename)
 
@@ -89,6 +123,10 @@ class MotionOnPolicyRunner(OnPolicyRunner):
                     if len(ep_info[key].shape) == 0:
                         ep_info[key] = ep_info[key].unsqueeze(0)
                     infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
+                if infotensor.numel() > 0 and not torch.isfinite(infotensor).all():
+                    bad_count = int((~torch.isfinite(infotensor)).sum().item())
+                    print(f"[WARN] Non-finite episode log value for {key} ({bad_count} values); replacing with 0.")
+                    infotensor = torch.nan_to_num(infotensor, nan=0.0, posinf=0.0, neginf=0.0)
                 value = torch.mean(infotensor)
                 # log to logger and terminal
                 if "/" in key:
@@ -190,13 +228,21 @@ class MotionOnPolicyRunner(OnPolicyRunner):
 
         policy_path = path.split("model")[0]
         filename = policy_path.split("/")[-2] + ".onnx"
-        export_motion_policy_as_onnx(
-            self.env.unwrapped, self.alg.policy, normalizer=self.obs_normalizer, path=policy_path, filename=filename
-        )
+        try:
+            export_motion_policy_as_onnx(
+                self.env.unwrapped,
+                _get_policy_module(self.alg),
+                normalizer=getattr(self, "obs_normalizer", None),
+                path=policy_path,
+                filename=filename,
+            )
+        except Exception as e:
+            print(f"[WARN] Motion ONNX export skipped for {filename}: {e}")
+            return
 
-        if self.logger_type in ["wandb"]:
+        if _is_wandb_logging_enabled(self):
             attach_onnx_metadata(self.env.unwrapped, wandb.run.name, path=policy_path, filename=filename)
-            wandb.save(policy_path + filename, base_path=os.path.dirname(policy_path))
+            wandb.save(os.path.join(policy_path, filename), base_path=os.path.dirname(policy_path))
 
             # link the artifact registry to this run
             if self.registry_name is not None:

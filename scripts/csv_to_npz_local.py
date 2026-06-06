@@ -10,6 +10,10 @@ Example (folder, 自动遍历所有 csv):
         --input_file LAFAN/g1 --input_fps 30 --output_fps 50
 """
 
+# NOTE:
+# 导出 mp4 时不要使用 --headless。
+# 请在有真实 DISPLAY 的环境下运行，并使用 --record_backend viewport。
+
 import argparse
 import os
 import glob
@@ -35,6 +39,37 @@ parser.add_argument(
     type=str,
     required=True,
     help="Path to input motion CSV file OR a directory containing CSV files.",
+)
+parser.add_argument(
+    "--robot",
+    type=str,
+    default="unitree_g1",
+    choices=("unitree_g1", "magicbot_z1"),
+    help="Robot articulation used to replay the CSV and export the NPZ.",
+)
+parser.add_argument(
+    "--root_trajectory_mode",
+    type=str,
+    default="input",
+    choices=("input", "foot_contact"),
+    help=(
+        "How to obtain the exported root/body world trajectory. "
+        "'input' uses the CSV root translation directly. "
+        "'foot_contact' discards the incoming world translation and rebuilds root motion "
+        "from foot-ground contact and stance anchors."
+    ),
+)
+parser.add_argument(
+    "--contact_height_thresh",
+    type=float,
+    default=0.035,
+    help="Extra height margin above each side's low-contact band when --root_trajectory_mode=foot_contact.",
+)
+parser.add_argument(
+    "--contact_speed_thresh",
+    type=float,
+    default=0.45,
+    help="Maximum planar foot speed (m/s) treated as stance when --root_trajectory_mode=foot_contact.",
 )
 parser.add_argument("--input_fps", type=int, default=30, help="FPS of input motion.")
 parser.add_argument(
@@ -129,6 +164,18 @@ parser.add_argument(
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
+if args_cli.record and args_cli.record_backend in {"auto", "viewport"}:
+    required_kit_args = (
+        "--enable omni.kit.capture.viewport "
+        "--enable omni.kit.viewport.utility "
+        "--enable omni.videoencoding"
+    )
+    existing_kit_args = getattr(args_cli, "kit_args", "") or ""
+    for token in required_kit_args.split():
+        if token not in existing_kit_args.split():
+            existing_kit_args = f"{existing_kit_args} {token}".strip()
+    args_cli.kit_args = existing_kit_args
+
 if args_cli.keep_frames:
     print("[INFO] --keep_frames 仅在 renderer.capture 回退模式下生效。")
 
@@ -181,6 +228,58 @@ from isaaclab.sim import SimulationContext
 from isaaclab.utils import configclass
 from isaaclab.utils.math import axis_angle_from_quat, quat_conjugate, quat_mul, quat_slerp
 from whole_body_tracking.robots.g1 import G1_CYLINDER_CFG
+from whole_body_tracking.robots.magicbot_z1 import MAGICBOT_Z1_CFG, MAGICBOT_Z1_JOINT_NAMES
+
+UNITREE_G1_JOINT_NAMES = [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+    "waist_yaw_joint",
+    "waist_roll_joint",
+    "waist_pitch_joint",
+    "left_shoulder_pitch_joint",
+    "left_shoulder_roll_joint",
+    "left_shoulder_yaw_joint",
+    "left_elbow_joint",
+    "left_wrist_roll_joint",
+    "left_wrist_pitch_joint",
+    "left_wrist_yaw_joint",
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_joint",
+    "right_wrist_roll_joint",
+    "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint",
+]
+
+ROBOT_SPECS = {
+    "unitree_g1": {
+        "cfg": G1_CYLINDER_CFG,
+        "joint_names": UNITREE_G1_JOINT_NAMES,
+        "foot_contact_bodies": {
+            "left": ("left_ankle_pitch_link", "left_ankle_roll_link"),
+            "right": ("right_ankle_pitch_link", "right_ankle_roll_link"),
+        },
+    },
+    "magicbot_z1": {
+        "cfg": MAGICBOT_Z1_CFG,
+        "joint_names": MAGICBOT_Z1_JOINT_NAMES,
+        "foot_contact_bodies": {
+            "left": ("left_ankle_pitch_link", "left_ankle_roll_link"),
+            "right": ("right_ankle_pitch_link", "right_ankle_roll_link"),
+        },
+    },
+}
 
 # ======== 录制相关依赖（优先 viewport，失败则回退 renderer.capture） ========
 _capture_available = False
@@ -322,12 +421,28 @@ class MotionLoader:
         self.motion_base_poss_input = motion[:, :3]
         self.motion_base_rots_input = motion[:, 3:7][:, [3, 0, 1, 2]]  # to wxyz
         self.motion_dof_poss_input = motion[:, 7:]
+        self._pad_legacy_magicbot_z1_head_joint()
 
         self.input_frames = motion.shape[0]
         # Clip duration follows frame-count convention: N frames at fps => N/fps seconds.
         self.duration = max(self.input_frames * self.input_dt, 1e-6)
         print(f"[INFO] Loaded motion: {self.motion_file}")
         print(f"       frames={self.input_frames}, duration={self.duration:.3f}s, speed_scale={self.speed_scale:.3f}")
+
+    def _pad_legacy_magicbot_z1_head_joint(self):
+        if (
+            args_cli.robot == "magicbot_z1"
+            and self.motion_dof_poss_input.shape[1] == len(MAGICBOT_Z1_JOINT_NAMES) - 1
+            and self.motion_dof_poss_input.shape[1] == 23
+            and MAGICBOT_Z1_JOINT_NAMES[-1] == "head_joint"
+        ):
+            head_pos = torch.zeros(
+                (self.motion_dof_poss_input.shape[0], 1),
+                dtype=self.motion_dof_poss_input.dtype,
+                device=self.motion_dof_poss_input.device,
+            )
+            self.motion_dof_poss_input = torch.cat((self.motion_dof_poss_input, head_pos), dim=1)
+            print("[INFO] Padded legacy MagicBot Z1 CSV with zero head_joint column.")
 
     def _compute_frame_blend(self, frame_pos):
         idx0 = frame_pos.floor().long()
@@ -476,6 +591,58 @@ def _get_frame_dir(base_name: str) -> str:
     frame_dir = os.path.join(args_cli.output_dir, f"frames_{base_name}")
     os.makedirs(frame_dir, exist_ok=True)
     return frame_dir
+
+
+def _get_viewport_frame_dir(base_name: str) -> str:
+    return os.path.join(args_cli.output_dir, f"{base_name}_frames")
+
+
+def _count_png_frames(frame_dir: str) -> int:
+    if not os.path.isdir(frame_dir):
+        return 0
+    try:
+        return sum(1 for entry in os.scandir(frame_dir) if entry.is_file() and entry.name.endswith(".png"))
+    except FileNotFoundError:
+        return 0
+
+
+def _wait_for_viewport_frame(sim, frame_dir: str, target_count: int, timeout_s: float = 2.0) -> bool:
+    """Pump the app/render loop until viewport capture flushes the expected PNG count."""
+    deadline = time.time() + max(0.1, float(timeout_s))
+    while time.time() < deadline:
+        if _count_png_frames(frame_dir) >= target_count:
+            return True
+        sim.render()
+    return _count_png_frames(frame_dir) >= target_count
+
+
+def _warmup_viewport(sim, min_settle_s: float = 0.0):
+    if min_settle_s <= 0.0:
+        return
+    try:
+        import omni.kit.app as kit_app
+
+        app = kit_app.get_app()
+    except Exception:
+        app = None
+
+    app_ready_seen = app is None
+    settle_start = None
+    deadline = time.time() + max(2.0, float(min_settle_s) + 10.0)
+
+    while time.time() < deadline:
+        sim.render()
+        if app is not None and not app_ready_seen:
+            try:
+                app_ready_seen = bool(app.is_app_ready())
+            except Exception:
+                app_ready_seen = False
+        if app_ready_seen:
+            if settle_start is None:
+                settle_start = time.time()
+            if (time.time() - settle_start) >= float(min_settle_s):
+                return
+    print(f"[Capture] viewport warmup timeout after {min_settle_s:.1f}s settle window; continuing.")
 
 
 def _frame_file(frame_dir: str, base_name: str, frame_idx: int) -> str:
@@ -638,7 +805,12 @@ def _start_video_capture(base_name: str, total_frames: int):
         options.file_type = ".png" if use_viewport_png_sequence else ".mp4"
         options.range_type = _capture_range_type.FRAMES
         options.start_frame = 1
-        options.end_frame = max(1, int(total_frames))
+        if use_viewport_png_sequence:
+            # Give viewport capture headroom for occasional duplicate/static frames while we
+            # synchronize on actual PNG flushes. Finalization trims back to expected_frames.
+            options.end_frame = max(int(total_frames) * 8, int(total_frames) + 120)
+        else:
+            options.end_frame = max(1, int(total_frames))
         options.capture_every_Nth_frames = 1
         options.fps = args_cli.output_fps
         options.overwrite_existing_frames = True
@@ -664,6 +836,7 @@ def _start_video_capture(base_name: str, total_frames: int):
                 "backend": "viewport",
                 "viewport_png_sequence": use_viewport_png_sequence,
                 "expected_frames": int(total_frames),
+                "frame_dir": _get_viewport_frame_dir(base_name) if use_viewport_png_sequence else None,
             }
         return None
     except Exception as e:
@@ -687,22 +860,62 @@ def _finalize_video_capture(sim, base_name: str, capture_ctx, timeout_s: float =
     if viewport_png_sequence:
         # Important: do NOT keep calling sim.render() here. Otherwise capture may keep
         # appending static tail frames after the motion itself has ended.
-        settle_timeout_s = min(max(1.0, timeout_s), 5.0)
+        frame_dir = capture_ctx.get("frame_dir") or _get_viewport_frame_dir(base_name)
+        settle_timeout_s = max(5.0, timeout_s)
+        stall_timeout_s = min(15.0, max(3.0, settle_timeout_s / 8.0))
         deadline = time.time() + settle_timeout_s
         last_log_time = 0.0
-        while _capture_is_active() and time.time() < deadline:
-            time.sleep(0.05)
+        last_frame_count = -1
+        last_progress_time = time.time()
+        while time.time() < deadline:
+            frame_count = _count_png_frames(frame_dir)
+            capture_active = _capture_is_active()
             now = time.time()
+
+            if frame_count != last_frame_count:
+                last_frame_count = frame_count
+                last_progress_time = now
+
             if now - last_log_time > 1.0:
-                print(f"[Capture] 等待 viewport 收尾... status={_capture_status_name()}")
+                expected_text = f"/{expected_frames}" if expected_frames is not None else ""
+                print(
+                    f"[Capture] 等待 viewport 收尾... "
+                    f"status={_capture_status_name()}, frames={frame_count}{expected_text}"
+                )
                 last_log_time = now
+
+            if expected_frames is not None and frame_count >= expected_frames:
+                if capture_active:
+                    try:
+                        _capture.cancel()
+                    except Exception:
+                        pass
+                break
+
+            if not capture_active and now - last_progress_time > 0.5:
+                break
+
+            if capture_active and now - last_progress_time > stall_timeout_s:
+                try:
+                    _capture.cancel()
+                except Exception:
+                    pass
+                print(
+                    f"[Capture] viewport 收尾停滞（>{stall_timeout_s:.0f}s 无新增帧），"
+                    f"已取消录制。当前帧数={frame_count}"
+                )
+                break
+
+            time.sleep(0.05)
         if _capture_is_active():
+            frame_count = _count_png_frames(frame_dir)
             try:
                 _capture.cancel()
             except Exception:
                 pass
             print(
-                f"[Capture] viewport 收尾超时（>{settle_timeout_s:.0f}s），已取消录制以避免继续追加帧。"
+                f"[Capture] viewport 收尾超时（>{settle_timeout_s:.0f}s），"
+                f"已取消录制。当前帧数={frame_count}"
             )
         # Give extension a brief moment to flush file handles.
         time.sleep(0.15)
@@ -744,7 +957,7 @@ def _finalize_video_capture(sim, base_name: str, capture_ctx, timeout_s: float =
         return
 
     expected_mp4 = os.path.join(args_cli.output_dir, base_name + ".mp4")
-    frame_dir = os.path.join(args_cli.output_dir, f"{base_name}_frames")
+    frame_dir = capture_ctx.get("frame_dir") or _get_viewport_frame_dir(base_name)
 
     if viewport_png_sequence:
         if os.path.isdir(frame_dir):
@@ -774,6 +987,22 @@ def _as_torch_clone(data, device):
     if isinstance(data, torch.Tensor):
         return data.to(device=device, dtype=torch.float32).clone()
     return torch.as_tensor(data, dtype=torch.float32, device=device).clone()
+
+
+def _write_root_state_compat(robot, root: torch.Tensor):
+    """Work around Warp dtype/view issues on some IsaacSim + driver combos."""
+    try:
+        robot.write_root_state_to_sim(root)
+    except RuntimeError as exc:
+        if "Cannot cast dtypes of unequal byte size" not in str(exc):
+            raise
+        import warp as wp
+
+        root_pose = root[:, :7].to(dtype=torch.float32).contiguous()
+        root_vel = root[:, 7:13].to(dtype=torch.float32).contiguous()
+        env_ids = torch.arange(root_pose.shape[0], device=root_pose.device, dtype=torch.int32)
+        robot.root_view.set_root_transforms(wp.from_torch(root_pose), indices=wp.from_torch(env_ids))
+        robot.root_view.set_root_velocities(wp.from_torch(root_vel), indices=wp.from_torch(env_ids))
 
 
 def _slice_to_numpy(data_slice):
@@ -841,12 +1070,148 @@ def _write_motion_state_to_sim(robot, scene, joint_idx, state):
     root[:, 3:7] = motion_base_rot
     root[:, 7:10] = motion_base_lin_vel
     root[:, 10:] = motion_base_ang_vel
-    robot.write_root_state_to_sim(root)
+    _write_root_state_compat(robot, root)
 
     jp = _as_torch_clone(robot.data.default_joint_pos, motion_dof_pos.device)
     jv = _as_torch_clone(robot.data.default_joint_vel, motion_dof_vel.device)
     jp[:, joint_idx], jv[:, joint_idx] = motion_dof_pos, motion_dof_vel
     robot.write_joint_state_to_sim(jp, jv)
+
+
+def _fill_small_false_gaps(mask: np.ndarray, max_gap: int) -> np.ndarray:
+    if max_gap <= 0 or mask.size == 0:
+        return mask.copy()
+    out = mask.copy()
+    start = 0
+    size = mask.size
+    while start < size:
+        if out[start]:
+            start += 1
+            continue
+        end = start
+        while end < size and not out[end]:
+            end += 1
+        if start > 0 and end < size and (end - start) <= max_gap:
+            out[start:end] = True
+        start = end
+    return out
+
+
+def _remove_short_true_runs(mask: np.ndarray, min_run: int) -> np.ndarray:
+    if min_run <= 1 or mask.size == 0:
+        return mask.copy()
+    out = mask.copy()
+    start = 0
+    size = mask.size
+    while start < size:
+        if not out[start]:
+            start += 1
+            continue
+        end = start
+        while end < size and out[end]:
+            end += 1
+        if (end - start) < min_run:
+            out[start:end] = False
+        start = end
+    return out
+
+
+def _detect_contact_mask(side_xy: np.ndarray, side_z: np.ndarray, fps: float) -> np.ndarray:
+    vel = np.linalg.norm(np.diff(side_xy, axis=0, prepend=side_xy[:1]), axis=1) * fps
+    z_floor = float(np.percentile(side_z, 15))
+    contact = (side_z <= z_floor + float(args_cli.contact_height_thresh)) & (vel <= float(args_cli.contact_speed_thresh))
+    contact = _fill_small_false_gaps(contact, max_gap=2)
+    contact = _remove_short_true_runs(contact, min_run=3)
+    return contact
+
+
+def _collect_contact_body_groups(robot) -> dict[str, list[int]]:
+    contact_spec = ROBOT_SPECS[args_cli.robot].get("foot_contact_bodies", {})
+    groups: dict[str, list[int]] = {}
+    for side, body_names in contact_spec.items():
+        body_ids = robot.find_bodies(list(body_names), preserve_order=True)[0]
+        if len(body_ids) == 0:
+            raise ValueError(f"No contact bodies found for side={side}: {body_names}")
+        groups[side] = [int(i) for i in body_ids]
+    if not groups:
+        raise ValueError(f"Robot {args_cli.robot} does not define foot_contact_bodies.")
+    return groups
+
+
+def _precompute_contact_root_trajectory(sim, scene, robot, joint_idx, motion):
+    contact_body_groups = _collect_contact_body_groups(robot)
+    num_frames = int(motion.output_frames)
+    orig_root = motion.motion_base_poss.detach().cpu().numpy().copy()
+    group_body_pos: dict[str, np.ndarray] = {}
+    for group_name, body_ids in contact_body_groups.items():
+        group_body_pos[group_name] = np.zeros((num_frames, len(body_ids), 3), dtype=np.float32)
+
+    motion.reset()
+    for frame_idx in range(num_frames):
+        state, _ = motion.get_next_state()
+        _write_motion_state_to_sim(robot, scene, joint_idx, state)
+        sim.forward()
+        scene.update(sim.get_physics_dt())
+        for group_name, body_ids in contact_body_groups.items():
+            group_body_pos[group_name][frame_idx] = _slice_to_numpy(robot.data.body_pos_w[0, body_ids])
+    motion.reset()
+
+    group_xy = {name: body_pos[:, :, :2].mean(axis=1) for name, body_pos in group_body_pos.items()}
+    group_z = {name: body_pos[:, :, 2].min(axis=1) for name, body_pos in group_body_pos.items()}
+    rel_xy = {name: group_xy[name] - orig_root[:, :2] for name in group_xy}
+    rel_z = {name: group_z[name] - orig_root[:, 2] for name in group_z}
+    contact_masks = {name: _detect_contact_mask(group_xy[name], group_z[name], motion.output_fps) for name in group_xy}
+
+    groups = list(group_xy.keys())
+    new_root = np.zeros_like(orig_root)
+    anchors_xy: dict[str, np.ndarray] = {}
+
+    active0 = [name for name in groups if contact_masks[name][0]]
+    if not active0:
+        lowest_group = min(groups, key=lambda name: float(group_z[name][0]))
+        contact_masks[lowest_group][0] = True
+        active0 = [lowest_group]
+
+    new_root[0, :2] = 0.0
+    for name in active0:
+        anchors_xy[name] = new_root[0, :2] + rel_xy[name][0]
+    new_root[0, 2] = max(float(-rel_z[name][0]) for name in active0)
+
+    for frame_idx in range(1, num_frames):
+        active = [name for name in groups if contact_masks[name][frame_idx]]
+        if not active:
+            lowest_group = min(groups, key=lambda name: float(group_z[name][frame_idx]))
+            active = [lowest_group]
+
+        stable_active = [
+            name
+            for name in active
+            if contact_masks[name][frame_idx - 1] and name in anchors_xy
+        ]
+        if stable_active:
+            candidates = [anchors_xy[name] - rel_xy[name][frame_idx] for name in stable_active]
+            new_root[frame_idx, :2] = np.mean(np.stack(candidates, axis=0), axis=0)
+        else:
+            new_root[frame_idx, :2] = new_root[frame_idx - 1, :2]
+
+        for name in active:
+            if name not in anchors_xy or not contact_masks[name][frame_idx - 1]:
+                anchors_xy[name] = new_root[frame_idx, :2] + rel_xy[name][frame_idx]
+
+        candidates = [anchors_xy[name] - rel_xy[name][frame_idx] for name in active if name in anchors_xy]
+        if candidates:
+            new_root[frame_idx, :2] = np.mean(np.stack(candidates, axis=0), axis=0)
+        new_root[frame_idx, 2] = max(float(-rel_z[name][frame_idx]) for name in active)
+
+    motion.motion_base_poss = torch.as_tensor(new_root, dtype=motion.motion_base_poss.dtype, device=motion.device)
+    motion._compute_velocities()
+
+    contact_stats = {name: int(mask.sum()) for name, mask in contact_masks.items()}
+    top_contact_stats = sorted(contact_stats.items(), key=lambda item: item[1], reverse=True)[:8]
+    print(
+        f"[ContactRoot] Rebuilt root trajectory from foot contacts ({len(contact_stats)} groups): "
+        + ", ".join(f"{name}={count} frames" for name, count in top_contact_stats)
+    )
 
 
 def _quat_wxyz_to_yaw(quat_wxyz: torch.Tensor) -> float:
@@ -904,6 +1269,7 @@ def _update_front_camera(sim, state, cam_ctx=None):
 def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
     """对单个 csv 跑一遍模拟并保存 npz，并可选录制 mp4。"""
     print(f"\n[INFO] ===== Processing file: {csv_path} =====")
+    print(f"[INFO] Robot target: {args_cli.robot} ({len(joint_names)} DOF)")
     output_path = make_output_path(csv_path)
     base_name = get_base_name(csv_path)
     print(f"[INFO] Output NPZ will be saved to: {output_path}")
@@ -920,13 +1286,33 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
     )
     motion.reset()
 
+    csv_dof = int(motion.motion_dof_poss.shape[1])
+    expected_dof = len(joint_names)
+    if csv_dof != expected_dof:
+        raise ValueError(
+            f"CSV DOF mismatch for robot={args_cli.robot}: expected {expected_dof}, got {csv_dof} from {csv_path}"
+        )
+
     robot = scene["robot"]
     joint_idx = robot.find_joints(joint_names, preserve_order=True)[0]
+
+    if args_cli.root_trajectory_mode == "foot_contact":
+        _precompute_contact_root_trajectory(sim, scene, robot, joint_idx, motion)
+
+    warmup_settle_s = 4.0 if args_cli.record and _capture_backend == "viewport" else 0.0
+    # Warm up the GUI viewport before starting capture. Without this, Isaac Sim 4.5 may
+    # start writing viewport PNGs only after the motion has already advanced for several seconds.
+    _warmup_viewport(sim, min_settle_s=warmup_settle_s)
     capture_ctx = _start_video_capture(base_name, motion.output_frames)
     cam_ctx = {"locked": False}
+    viewport_frame_dir = None
+    if capture_ctx is not None and capture_ctx.get("backend") == "viewport":
+        viewport_frame_dir = capture_ctx.get("frame_dir") or _get_viewport_frame_dir(base_name)
 
     log = {
         "fps": [args_cli.output_fps],
+        "joint_names": np.asarray(robot.joint_names),
+        "body_names": np.asarray(robot.body_names),
         "joint_pos": [],
         "joint_vel": [],
         "body_pos_w": [],
@@ -948,7 +1334,19 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
         # For offline conversion we only need up-to-date kinematics, not viewport rendering.
         # Rendering each frame is significantly slower for large batch conversion.
         if args_cli.record or args_cli.render:
+            frames_before_render = _count_png_frames(viewport_frame_dir) if viewport_frame_dir is not None else 0
             sim.render()
+            if viewport_frame_dir is not None:
+                target_frame_count = frames_before_render + 1
+                frame_wait_timeout_s = 12.0 if target_frame_count == 1 else 3.0
+                if not _wait_for_viewport_frame(
+                    sim, viewport_frame_dir, target_frame_count, timeout_s=frame_wait_timeout_s
+                ):
+                    current_frames = _count_png_frames(viewport_frame_dir)
+                    raise RuntimeError(
+                        "Viewport capture failed to flush frames in time: "
+                        f"expected>={target_frame_count}, got={current_frames}, frame_dir={viewport_frame_dir}"
+                    )
         else:
             sim.forward()
         scene.update(sim.get_physics_dt())
@@ -978,7 +1376,18 @@ def run_simulator_for_file(sim, scene, joint_names, csv_path: str):
             if capture_ctx is not None:
                 _finalize_video_capture(sim, base_name, capture_ctx)
             break
- 
+
+    if not file_saved:
+        # Treat "no output produced" as a hard failure so shell wrappers can retry/fail correctly.
+        if capture_ctx is not None:
+            _finalize_video_capture(sim, base_name, capture_ctx)
+        raise RuntimeError(
+            f"NPZ was not generated for input: {csv_path}. "
+            "Simulation loop ended before reset/save completed."
+        )
+
+    if not os.path.isfile(output_path):
+        raise RuntimeError(f"Expected NPZ not found after save: {output_path}")
 
 # ========== 6. Main ==========
 def main():
@@ -988,41 +1397,12 @@ def main():
     _maybe_apply_5090_noise_fix(sim_cfg)
     sim = SimulationContext(sim_cfg)
     scene_cfg = ReplayMotionsSceneCfg(num_envs=1, env_spacing=2.0)
+    scene_cfg.robot = ROBOT_SPECS[args_cli.robot]["cfg"].replace(prim_path="{ENV_REGEX_NS}/Robot")
     scene = InteractiveScene(scene_cfg)
     sim.reset()
     print("[INFO] Isaac Sim setup complete.")
-
-    joint_names = [
-        "left_hip_pitch_joint",
-        "left_hip_roll_joint",
-        "left_hip_yaw_joint",
-        "left_knee_joint",
-        "left_ankle_pitch_joint",
-        "left_ankle_roll_joint",
-        "right_hip_pitch_joint",
-        "right_hip_roll_joint",
-        "right_hip_yaw_joint",
-        "right_knee_joint",
-        "right_ankle_pitch_joint",
-        "right_ankle_roll_joint",
-        "waist_yaw_joint",
-        "waist_roll_joint",
-        "waist_pitch_joint",
-        "left_shoulder_pitch_joint",
-        "left_shoulder_roll_joint",
-        "left_shoulder_yaw_joint",
-        "left_elbow_joint",
-        "left_wrist_roll_joint",
-        "left_wrist_pitch_joint",
-        "left_wrist_yaw_joint",
-        "right_shoulder_pitch_joint",
-        "right_shoulder_roll_joint",
-        "right_shoulder_yaw_joint",
-        "right_elbow_joint",
-        "right_wrist_roll_joint",
-        "right_wrist_pitch_joint",
-        "right_wrist_yaw_joint",
-    ]
+    joint_names = ROBOT_SPECS[args_cli.robot]["joint_names"]
+    print(f"[INFO] Using robot={args_cli.robot}, joint_count={len(joint_names)}")
 
     if INPUT_IS_DIR:
         csv_pattern = os.path.join(args_cli.input_file, "*.csv")

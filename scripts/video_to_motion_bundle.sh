@@ -83,6 +83,17 @@ VIRTUAL_DISPLAY_REQUIRED="${VIRTUAL_DISPLAY_REQUIRED:-0}"
 VIRTUAL_DISPLAY_NUM="${VIRTUAL_DISPLAY_NUM:-99}"
 VIRTUAL_DISPLAY_WHD="${VIRTUAL_DISPLAY_WHD:-1920x1080x24}"
 HEADLESS_FALLBACK_BACKEND="${HEADLESS_FALLBACK_BACKEND:-renderer}"
+STAGE_VIDEO_LAYOUT="${STAGE_VIDEO_LAYOUT:-1}"
+GVHMR_VERBOSE="${GVHMR_VERBOSE:-1}"
+GMR_PREVIEW_VIDEO="${GMR_PREVIEW_VIDEO:-1}"
+GMR_VIDEO_TIMEOUT="${GMR_VIDEO_TIMEOUT:-1200}"
+GMR_VIDEO_WIDTH="${GMR_VIDEO_WIDTH:-640}"
+GMR_VIDEO_HEIGHT="${GMR_VIDEO_HEIGHT:-360}"
+TARGET_ROBOT="${TARGET_ROBOT:-unitree_g1}"
+STAGE_VIDEO_DIR="${RUN_DIR}/videos"
+GMR_VIDEO_FILE="${GMR_OUT}/${VIDEO_NAME}.mp4"
+
+mkdir -p "$STAGE_VIDEO_DIR"
 
 # Force GVHMR stage to use whole_body_tracking's BeyondMimic env by default.
 if [[ -z "${GVHMR_ENV_FORCE_ALLOW:-}" ]]; then
@@ -107,6 +118,37 @@ fi
 if [[ "$USER_HEADLESS" == "1" ]]; then
   echo "[INFO] User requested --headless; csv_to_npz stage will honor it when renderer/headless mode is selected."
 fi
+
+case "$TARGET_ROBOT" in
+  unitree_g1|magicbot_z1) ;;
+  *)
+    echo "Unsupported TARGET_ROBOT=$TARGET_ROBOT. Supported bundle targets: unitree_g1, magicbot_z1"
+    exit 1
+    ;;
+esac
+
+link_if_exists() {
+  local src="$1"
+  local dst="$2"
+  if [[ -e "$src" ]]; then
+    mkdir -p "$(dirname "$dst")"
+    ln -sf "$src" "$dst"
+  fi
+}
+
+collect_stage_videos() {
+  if [[ "$STAGE_VIDEO_LAYOUT" != "1" ]]; then
+    return 0
+  fi
+  link_if_exists "${SMPL_DIR}/0_input_video.mp4" "${STAGE_VIDEO_DIR}/0_input_video.mp4"
+  link_if_exists "${SMPL_DIR}/preprocess/bbx_xyxy_video_overlay.mp4" "${STAGE_VIDEO_DIR}/0_bbx_overlay.mp4"
+  link_if_exists "${SMPL_DIR}/preprocess/vitpose_video_overlay.mp4" "${STAGE_VIDEO_DIR}/0_pose_overlay.mp4"
+  link_if_exists "${SMPL_DIR}/1_incam.mp4" "${STAGE_VIDEO_DIR}/1_human_incam.mp4"
+  link_if_exists "${SMPL_DIR}/2_global.mp4" "${STAGE_VIDEO_DIR}/2_human_global.mp4"
+  link_if_exists "${SMPL_DIR}/${VIDEO_NAME}_3_incam_global_horiz.mp4" "${STAGE_VIDEO_DIR}/3_human_incam_global_horiz.mp4"
+  link_if_exists "${GMR_VIDEO_FILE}" "${STAGE_VIDEO_DIR}/4_robot_gmr.mp4"
+  link_if_exists "${NPZ_OUT}/${VIDEO_NAME}.mp4" "${STAGE_VIDEO_DIR}/5_robot_final.mp4"
+}
 
 acquire_csv2npz_lock() {
   local waited=0
@@ -239,6 +281,22 @@ run_gvhmr() {
       -s --no_render
 }
 
+run_gvhmr_stage_videos() {
+  local dev="$1"
+  echo "[GVHMR] rendering stage videos with device=$dev"
+  env \
+    GVHMR_DEVICE="$dev" \
+    PYTHONNOUSERSITE=1 \
+    PYTHONPATH="/home/hiyio/HoloMotion/thirdparties/GVHMR:/home/hiyio/HoloMotion/holomotion/src:${PYTHONPATH:-}" \
+    YOLO_CONFIG_DIR="/tmp/Ultralytics" \
+    conda run -n "$GVHMR_ENV" python \
+      /home/hiyio/whole_body_tracking/scripts/render_gvhmr_stage_videos.py \
+      --video "$VIDEO" \
+      --output_root "$GVHMR_OUT" \
+      -s \
+      --force
+}
+
 if [[ "$GVHMR_DEVICE" == "cuda" ]]; then
   if ! run_gvhmr cuda; then
     echo "[GVHMR] cuda failed, fallback to cpu"
@@ -251,6 +309,18 @@ fi
 if [[ ! -f "$SMPL_FILE" ]]; then
   echo "SMPL output not found: $SMPL_FILE"
   exit 1
+fi
+
+if [[ "$STAGE_VIDEO_LAYOUT" == "1" ]]; then
+  echo "[1.1/5] GVHMR: render stage videos"
+  set +e
+  run_gvhmr_stage_videos "$GVHMR_DEVICE"
+  GVHMR_RENDER_RC=$?
+  set -e
+  if [[ $GVHMR_RENDER_RC -ne 0 ]]; then
+    echo "[WARN] GVHMR stage video rendering failed rc=${GVHMR_RENDER_RC}; continue without human-stage videos."
+  fi
+  collect_stage_videos
 fi
 
 echo "[2/5] SMPL -> SMPLX"
@@ -267,7 +337,7 @@ fi
 echo "[3/5] SMPLX -> GMR PKL"
 ln -sf "$SMPLX_FILE" "$SMPLX_ONLY/${VIDEO_NAME}.npz"
 conda run -n "$HOLOMOTION_ENV" python /home/hiyio/HoloMotion/thirdparties/GMR/scripts/smplx_to_robot_dataset.py \
-  --robot unitree_g1 \
+  --robot "$TARGET_ROBOT" \
   --src_folder "$SMPLX_ONLY" \
   --tgt_folder "$GMR_OUT" \
   --num_cpus 1 --override
@@ -276,6 +346,53 @@ PKL_FILE="${GMR_OUT}/${VIDEO_NAME}.pkl"
 if [[ ! -f "$PKL_FILE" ]]; then
   echo "GMR output not found: $PKL_FILE"
   exit 1
+fi
+
+run_gmr_preview_video() {
+  local prev_display="${DISPLAY:-}"
+  local cmd=()
+  acquire_csv2npz_lock
+
+  if ! csv2npz_display_ready "${DISPLAY:-}" && ! start_csv2npz_virtual_display; then
+    echo "[GMR] No usable display found; skip preview video."
+    release_csv2npz_lock
+    return 1
+  fi
+
+  cmd=(env PYTHONNOUSERSITE=1 conda run -n "$HOLOMOTION_ENV" python
+    /home/hiyio/whole_body_tracking/scripts/render_gmr_pkl_video.py
+    --robot "$TARGET_ROBOT"
+    --robot_motion_path "$PKL_FILE"
+    --video_path "$GMR_VIDEO_FILE"
+    --video_width "$GMR_VIDEO_WIDTH"
+    --video_height "$GMR_VIDEO_HEIGHT")
+
+  echo "[GMR] Preview command: ${cmd[*]}"
+  set +e
+  timeout --signal=TERM --kill-after=10s "$GMR_VIDEO_TIMEOUT" "${cmd[@]}"
+  local rc=$?
+  set -e
+
+  stop_csv2npz_virtual_display
+  if [[ -n "$prev_display" ]]; then
+    export DISPLAY="$prev_display"
+  else
+    unset DISPLAY || true
+  fi
+  release_csv2npz_lock
+  return $rc
+}
+
+if [[ "$STAGE_VIDEO_LAYOUT" == "1" && "$GMR_PREVIEW_VIDEO" == "1" ]]; then
+  echo "[3.1/5] GMR: render robot preview video"
+  set +e
+  run_gmr_preview_video
+  GMR_PREVIEW_RC=$?
+  set -e
+  if [[ $GMR_PREVIEW_RC -ne 0 ]]; then
+    echo "[WARN] GMR robot preview rendering failed rc=${GMR_PREVIEW_RC}; continue without GMR preview."
+  fi
+  collect_stage_videos
 fi
 
 echo "[4/5] PKL -> CSV"
@@ -348,6 +465,7 @@ run_csv_to_npz() {
   echo "[CSV2NPZ] DISPLAY=${DISPLAY:-<unset>}"
 
   cmd=(env PYTHONNOUSERSITE=1 conda run -n "$SIM_ENV" python /home/hiyio/whole_body_tracking/scripts/csv_to_npz_local.py
+    --robot "$TARGET_ROBOT"
     --input_file "$CSV_FILE"
     --input_fps 30 --output_fps 50
     --output_dir "$NPZ_OUT"
@@ -421,6 +539,7 @@ fi
 
 # Convenience link at bundle root
 ln -sf "$NPZ_FILE" "${RUN_DIR}/${VIDEO_NAME}.npz"
+collect_stage_videos
 
 echo "[DONE] Bundle created: ${RUN_DIR}"
 echo "NPZ: ${NPZ_FILE}"
@@ -430,4 +549,7 @@ elif [[ -f "$MP4_FILE" ]]; then
   echo "MP4: ${MP4_FILE}"
 else
   echo "[WARN] MP4 still not found: ${MP4_FILE}"
+fi
+if [[ "$STAGE_VIDEO_LAYOUT" == "1" ]]; then
+  echo "Stage videos: ${STAGE_VIDEO_DIR}"
 fi

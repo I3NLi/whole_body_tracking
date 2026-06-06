@@ -6,6 +6,10 @@ from whole_body_tracking.tasks.tracking.config.g1.agents.rsl_rl_ppo_cfg import L
 import whole_body_tracking.tasks.tracking.mdp as mdp
 from whole_body_tracking.tasks.tracking.tracking_env_cfg import TrackingEnvCfg
 
+# Keep the curriculum horizon aligned with the paired PPO defaults:
+# 80_000 iterations * 24 rollout steps per env.
+WOSTATE_CURRICULUM_TOTAL_STEPS = 1_920_000
+
 
 @configclass
 class G1FlatEnvCfg(TrackingEnvCfg):
@@ -38,14 +42,14 @@ class G1FlatEnvCfg(TrackingEnvCfg):
             "right_wrist_yaw_link",
         ]
         # High-CoM guidance term (more aggressive for flips).
-        self.rewards.base_height_above.weight = 0.4
-        self.rewards.base_height_above.params["min_height"] = 0.78
-        self.rewards.base_height_above.params["max_height"] = 0.95
+        # self.rewards.base_height_above.weight = 0.4
+        # self.rewards.base_height_above.params["min_height"] = 0.78
+        # self.rewards.base_height_above.params["max_height"] = 0.95
         # Base stability rewards (controlled here for G1; keep disabled for now).
         # Original weights: lin_vel_z_l2=-0.5, ang_vel_xy_l2=-0.05, flat_orientation_l2=-0.5
-        self.rewards.lin_vel_z_l2.weight = 0.0
-        self.rewards.ang_vel_xy_l2.weight = 0.0
-        self.rewards.flat_orientation_l2.weight = 0.0
+        self.rewards.lin_vel_z_l2.weight = -0.5
+        self.rewards.ang_vel_xy_l2.weight = -0.05
+        self.rewards.flat_orientation_l2.weight = -0.5
 
 
 @configclass
@@ -54,17 +58,23 @@ class G1FlatWoStateEstimationEnvCfg(G1FlatEnvCfg):
         super().__post_init__()
         self.observations.policy.motion_anchor_pos_b = None
         self.observations.policy.base_lin_vel = None
+
         # Keep the last motion frame for 3s before resampling.
-        self.commands.motion.motion_hold_seconds = 3.0
+        # self.commands.motion.motion_hold_seconds = 2.0
+        # Randomly pause (freeze current frame) to mimic deploy pause behavior.
+        # self.commands.motion.random_pause_prob = 0.01
+        # Each pause lasts 1-2 seconds (in motion fps), then resumes.
+        # self.commands.motion.random_pause_duration_s = (1.0, 2.0)
+
         # Enable progressive curriculum for Wo-State estimation by default.
-        self.curriculum.wostate_progressive = CurrTerm(
-            func=mdp.wostate_progressive_curriculum,
-            params={
-                "total_steps": 6_000_000,
-                "stage_ends": (0.35, 0.60, 0.85),
-                "max_stop_ratio": 0.20,
-            },
-        )
+        # self.curriculum.wostate_progressive = CurrTerm(
+        #     func=mdp.wostate_progressive_curriculum,
+        #     params={
+        #         "total_steps": 6_000_000,
+        #         "stage_ends": (0.35, 0.60, 0.85),
+        #         "max_stop_ratio": 0.20,
+        #     },
+        # )
 
 
 @configclass
@@ -174,7 +184,7 @@ class G1FlatWoStateCurriculumEnvCfg(G1FlatWoStateEstimationEnvCfg):
         self.curriculum.wostate_progressive = CurrTerm(
             func=mdp.wostate_progressive_curriculum,
             params={
-                "total_steps": 6_000_000,
+                "total_steps": WOSTATE_CURRICULUM_TOTAL_STEPS,
                 "stage_ends": (0.35, 0.60, 0.85),
                 "max_stop_ratio": 0.20,
             },

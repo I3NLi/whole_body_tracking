@@ -38,6 +38,16 @@ python scripts/rsl_rl/train_local.py \
   --headless
 ```
 
+MagicBot-Z1 (24 DOF):
+
+```bash
+python scripts/rsl_rl/train_local.py \
+  --task=Tracking-Flat-MagicBot-Z1-Wo-State-Estimation-v0 \
+  --num_envs=4096 \
+  --motion_file /home/hiyio/whole_body_tracking/motions/20260413-005208-magicbot/npz/magicbot_z1.npz \
+  --headless
+```
+
 ## Local Training (Multiple Motions)
 
 Explicit list:

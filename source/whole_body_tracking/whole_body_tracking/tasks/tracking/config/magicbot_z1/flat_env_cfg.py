@@ -10,6 +10,7 @@ from whole_body_tracking.tasks.tracking.config.g1.flat_env_cfg import (
     G1FlatLowFreqEnvCfg,
     G1FlatWoStateCurriculumEnvCfg,
     G1FlatWoStateEstimationEnvCfg,
+    WOSTATE_CURRICULUM_TOTAL_STEPS,
 )
 
 
@@ -111,7 +112,7 @@ class MagicBotZ1FlatWoStateCurriculumEnvCfg(G1FlatWoStateCurriculumEnvCfg):
         self.curriculum.wostate_progressive = CurrTerm(
             func=mdp.wostate_progressive_curriculum,
             params={
-                "total_steps": 6_000_000,
+                "total_steps": WOSTATE_CURRICULUM_TOTAL_STEPS,
                 "stage_ends": (0.35, 0.60, 0.85),
                 "max_stop_ratio": 0.20,
             },

@@ -60,14 +60,23 @@ class wostate_progressive_curriculum(ManagerTermBase):
             name: float(env.reward_manager.get_term_cfg(name).weight) for name in self._IMITATION_TERMS
         }
         self._motion_cmd: MotionCommand = env.command_manager.get_term("motion")
+        anchor_pos_cfg = env.termination_manager.get_term_cfg("anchor_pos")
+        anchor_ori_cfg = env.termination_manager.get_term_cfg("anchor_ori")
+        self._anchor_pos_base_threshold = float(anchor_pos_cfg.params["threshold"])
+        self._anchor_ori_base_threshold = float(anchor_ori_cfg.params["threshold"])
+        self._anchor_pos_base_hold = float(anchor_pos_cfg.params.get("hold_seconds", 0.0) or 0.0)
+        self._anchor_ori_base_hold = float(anchor_ori_cfg.params.get("hold_seconds", 0.0) or 0.0)
 
     def __call__(
         self,
         env: "ManagerBasedRLEnv",
         env_ids: Sequence[int],
-        total_steps: int = 6_000_000,
+        total_steps: int = 1_920_000,
         stage_ends: tuple[float, float, float] = (0.35, 0.60, 0.85),
         max_stop_ratio: float = 0.20,
+        anchor_pos_threshold_range: tuple[float, float] | None = None,
+        anchor_ori_threshold_range: tuple[float, float] | None = None,
+        anchor_hold_seconds_range: tuple[float, float] | None = None,
     ) -> dict[str, float]:
         del env_ids
         step = float(env.common_step_counter)
@@ -131,9 +140,35 @@ class wostate_progressive_curriculum(ManagerTermBase):
             stop_prob = min(max_stop_ratio, _lerp(0.05, 0.18, alpha))
             stop_dur = (_lerp(0.2, 0.8, alpha), _lerp(0.5, 1.5, alpha))
 
+        if anchor_pos_threshold_range is None:
+            anchor_pos_threshold_range = (
+                max(self._anchor_pos_base_threshold * 2.0, self._anchor_pos_base_threshold + 0.20),
+                max(self._anchor_pos_base_threshold, 0.35),
+            )
+        if anchor_ori_threshold_range is None:
+            anchor_ori_threshold_range = (
+                max(self._anchor_ori_base_threshold * 1.5, self._anchor_ori_base_threshold + 0.30),
+                max(self._anchor_ori_base_threshold, 0.95),
+            )
+        if anchor_hold_seconds_range is None:
+            anchor_hold_seconds_range = (
+                max(self._anchor_pos_base_hold, self._anchor_ori_base_hold, 0.60),
+                max(self._anchor_pos_base_hold, self._anchor_ori_base_hold, 0.15),
+            )
+
+        anchor_pos_threshold = _lerp(anchor_pos_threshold_range[0], anchor_pos_threshold_range[1], progress)
+        anchor_ori_threshold = _lerp(anchor_ori_threshold_range[0], anchor_ori_threshold_range[1], progress)
+        anchor_hold_seconds = _lerp(anchor_hold_seconds_range[0], anchor_hold_seconds_range[1], progress)
+
         self._update_rewards(env, imitation_scale, upright_weight, balance_scale, action_rate_weight)
         self._update_push(env, push_range=push_range, interval_s=push_interval)
         self._update_randomization(env, level=rand_level)
+        self._update_terminations(
+            env,
+            anchor_pos_threshold=anchor_pos_threshold,
+            anchor_ori_threshold=anchor_ori_threshold,
+            anchor_hold_seconds=anchor_hold_seconds,
+        )
         self._motion_cmd.set_random_pause(pause_prob=stop_prob, duration_s=stop_dur)
 
         tracking_error = (
@@ -151,6 +186,9 @@ class wostate_progressive_curriculum(ManagerTermBase):
             "stop_prob": float(stop_prob),
             "tracking_err_proxy": float(tracking_error),
             "fall_rate_proxy": float(fall_rate),
+            "anchor_pos_threshold": float(anchor_pos_threshold),
+            "anchor_ori_threshold": float(anchor_ori_threshold),
+            "anchor_hold_seconds": float(anchor_hold_seconds),
         }
 
     def _update_rewards(
@@ -196,6 +234,23 @@ class wostate_progressive_curriculum(ManagerTermBase):
         push_cfg.interval_range_s = interval_s
         push_cfg.params["velocity_range"] = push_range
         env.event_manager.set_term_cfg("push_robot", push_cfg)
+
+    def _update_terminations(
+        self,
+        env: "ManagerBasedRLEnv",
+        anchor_pos_threshold: float,
+        anchor_ori_threshold: float,
+        anchor_hold_seconds: float,
+    ) -> None:
+        anchor_pos_cfg = env.termination_manager.get_term_cfg("anchor_pos")
+        anchor_pos_cfg.params["threshold"] = float(anchor_pos_threshold)
+        anchor_pos_cfg.params["hold_seconds"] = float(anchor_hold_seconds)
+        env.termination_manager.set_term_cfg("anchor_pos", anchor_pos_cfg)
+
+        anchor_ori_cfg = env.termination_manager.get_term_cfg("anchor_ori")
+        anchor_ori_cfg.params["threshold"] = float(anchor_ori_threshold)
+        anchor_ori_cfg.params["hold_seconds"] = float(anchor_hold_seconds)
+        env.termination_manager.set_term_cfg("anchor_ori", anchor_ori_cfg)
 
     def _update_randomization(self, env: "ManagerBasedRLEnv", level: float) -> None:
         mass_cfg = env.event_manager.get_term_cfg("mass_scale")

@@ -123,7 +123,7 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_pickle, dump_yaml
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
@@ -131,6 +131,11 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import whole_body_tracking.tasks  # noqa: F401
 # 使用你本地仅保存版本的 Runner
 from whole_body_tracking.utils.my_on_policy_runner_local import MotionOnPolicyRunner as OnPolicyRunner
+from whole_body_tracking.utils.finite_rsl_rl_wrapper import FiniteRslRlVecEnvWrapper as RslRlVecEnvWrapper
+from whole_body_tracking.utils.rsl_rl_noise_guard import (
+    install_scalar_std_optimizer_guard,
+    sanitize_scalar_policy_std,
+)
 
 # cuDNN / TF32 设置
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -381,6 +386,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # --------- Runner (local-only saver) ---------
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    if install_scalar_std_optimizer_guard(runner.alg.optimizer, runner.alg.policy):
+        print("[INFO] Installed scalar-std optimizer guard for RSL-RL policy noise.")
+    sanitize_scalar_policy_std(runner.alg.policy)
     if use_motion_schedule:
         runner.motion_schedule_enabled = True
         runner.motion_schedule_total = motion_total_rounds
@@ -408,6 +416,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             runner.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
             runner.current_learning_iteration = loaded_dict.get("iter", 0)
             runner.last_learning_iteration = runner.current_learning_iteration
+        if sanitize_scalar_policy_std(runner.alg.policy):
+            print("[WARN] Resume checkpoint contained invalid scalar std values; clamped them to stay positive.")
 
     # persist configs
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)

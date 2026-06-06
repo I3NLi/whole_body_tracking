@@ -25,6 +25,9 @@ keywords = ["extension", "template", "isaaclab"]
 [[python.module]]
 name = "whole_body_tracking"
 
+[[python.module]]
+name = "whole_body_tracking.tasks"
+
 [isaaclab_settings]
 # TODO: Uncomment and list any apt dependencies here.
 #       If none, leave it commented out.

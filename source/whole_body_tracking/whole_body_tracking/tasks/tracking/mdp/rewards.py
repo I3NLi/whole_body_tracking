@@ -91,6 +91,15 @@ def base_height_above(
     return torch.clamp(height - min_height, min=0.0)
 
 
+def energy(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    asset = env.scene[asset_cfg.name]
+    joint_ids = asset_cfg.joint_ids
+    return torch.norm(torch.abs(asset.data.applied_torque[:, joint_ids] * asset.data.joint_vel[:, joint_ids]), dim=-1)
+
+
 def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float) -> torch.Tensor:
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     first_air = contact_sensor.compute_first_air(env.step_dt, env.physics_dt)[:, sensor_cfg.body_ids]
@@ -98,3 +107,21 @@ def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, thresh
     reward = torch.sum((last_contact_time < threshold) * first_air, dim=-1)
     return reward
 
+
+def feet_double_air_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float = 0.35) -> torch.Tensor:
+    """Reward overlap air-time where all selected feet are simultaneously off-ground.
+
+    The reward is normalized to [0, 1] by ``threshold`` and saturates once the
+    shared air-time exceeds the threshold.
+    """
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    if not contact_sensor.cfg.track_air_time:
+        raise RuntimeError("Activate ContactSensor's track_air_time!")
+
+    air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids]
+    if air_time.shape[1] < 2:
+        raise ValueError("feet_double_air_time expects at least two foot bodies in sensor_cfg.body_ids.")
+
+    shared_air_time = torch.min(air_time, dim=1).values
+    threshold = max(float(threshold), 1.0e-6)
+    return torch.clamp(shared_air_time / threshold, min=0.0, max=1.0)
