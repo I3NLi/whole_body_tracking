@@ -521,11 +521,6 @@ class MotionCommand(CommandTerm):
             motion_env_ids = env_ids[env_mask]
             motion_len = int(self._motion_lengths[motion_id].item())
             bin_count = self._motion_bin_counts[motion_id]
-            motion_start_step = getattr(self.cfg, "motion_start_step", None)
-            if motion_start_step is not None:
-                start_step = max(0, min(int(motion_start_step), max(motion_len - 1, 0)))
-                self.time_steps[motion_env_ids] = start_step
-                continue
 
             if torch.any(episode_failed[env_mask]):
                 current_bin_index = torch.clamp(
@@ -791,7 +786,6 @@ class MotionCommandCfg(CommandTermCfg):
     # Random pause to freeze the current motion frame (seconds).
     random_pause_prob: float = 0.0
     random_pause_duration_s: tuple[float, float] = (0.0, 0.0)
-    motion_start_step: int | None = None
     # When enabled, shift root z on reset so the lowest tracked body starts at ground level.
     ground_reference_on_reset: bool = False
     ground_reference_clearance: float = 0.0
