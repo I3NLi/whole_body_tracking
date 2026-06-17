@@ -1,9 +1,11 @@
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
+from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
 import whole_body_tracking.tasks.tracking.mdp as mdp
 from whole_body_tracking.robots.magicbot_z1 import MAGICBOT_Z1_ACTION_SCALE, MAGICBOT_Z1_CFG
+from whole_body_tracking.tasks.tracking.tracking_env_cfg import RewardsCfg
 from whole_body_tracking.tasks.tracking.config.g1.flat_env_cfg import (
     G1FlatBackflipEnvCfg,
     G1FlatEnvCfg,
@@ -52,6 +54,22 @@ MAGICBOT_Z1_UNDESIRED_CONTACT_REGEX = [
 ]
 
 
+@configclass
+class MagicBotZ1RewardsCfg(RewardsCfg):
+    center_of_mass = RewTerm(
+        func=mdp.reward_center_of_mass,
+        weight=0.25,
+        params={
+            "command_name": "motion",
+            "sigma_com": 0.1,
+            "single_support_height": 0.05,
+            "double_support_reward": 1.0,
+            "left_foot_body": "left_ankle_roll_link",
+            "right_foot_body": "right_ankle_roll_link",
+        },
+    )
+
+
 def _apply_magicbot_z1_overrides(env_cfg) -> None:
     env_cfg.scene.robot = MAGICBOT_Z1_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     env_cfg.actions.joint_pos.scale = MAGICBOT_Z1_ACTION_SCALE
@@ -78,6 +96,8 @@ def _apply_magicbot_z1_overrides(env_cfg) -> None:
 
 @configclass
 class MagicBotZ1FlatEnvCfg(G1FlatEnvCfg):
+    rewards: MagicBotZ1RewardsCfg = MagicBotZ1RewardsCfg()
+
     def __post_init__(self):
         super().__post_init__()
         _apply_magicbot_z1_overrides(self)
@@ -85,6 +105,8 @@ class MagicBotZ1FlatEnvCfg(G1FlatEnvCfg):
 
 @configclass
 class MagicBotZ1FlatWoStateEstimationEnvCfg(G1FlatWoStateEstimationEnvCfg):
+    rewards: MagicBotZ1RewardsCfg = MagicBotZ1RewardsCfg()
+
     def __post_init__(self):
         super().__post_init__()
         _apply_magicbot_z1_overrides(self)
@@ -92,6 +114,8 @@ class MagicBotZ1FlatWoStateEstimationEnvCfg(G1FlatWoStateEstimationEnvCfg):
 
 @configclass
 class MagicBotZ1FlatBackflipEnvCfg(G1FlatBackflipEnvCfg):
+    rewards: MagicBotZ1RewardsCfg = MagicBotZ1RewardsCfg()
+
     def __post_init__(self):
         super().__post_init__()
         _apply_magicbot_z1_overrides(self)
@@ -99,6 +123,8 @@ class MagicBotZ1FlatBackflipEnvCfg(G1FlatBackflipEnvCfg):
 
 @configclass
 class MagicBotZ1FlatLowFreqEnvCfg(G1FlatLowFreqEnvCfg):
+    rewards: MagicBotZ1RewardsCfg = MagicBotZ1RewardsCfg()
+
     def __post_init__(self):
         super().__post_init__()
         _apply_magicbot_z1_overrides(self)
@@ -106,6 +132,8 @@ class MagicBotZ1FlatLowFreqEnvCfg(G1FlatLowFreqEnvCfg):
 
 @configclass
 class MagicBotZ1FlatWoStateCurriculumEnvCfg(G1FlatWoStateCurriculumEnvCfg):
+    rewards: MagicBotZ1RewardsCfg = MagicBotZ1RewardsCfg()
+
     def __post_init__(self):
         super().__post_init__()
         _apply_magicbot_z1_overrides(self)
