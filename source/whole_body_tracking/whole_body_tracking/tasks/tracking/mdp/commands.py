@@ -4,6 +4,7 @@ import math
 import numpy as np
 import os
 import torch
+import warp as wp
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import MISSING
@@ -441,43 +442,48 @@ class MotionCommand(CommandTerm):
 
     @property
     def robot_joint_pos(self) -> torch.Tensor:
-        return self.robot.data.joint_pos
+        return self._robot_data_to_torch(self.robot.data.joint_pos)
 
     @property
     def robot_joint_vel(self) -> torch.Tensor:
-        return self.robot.data.joint_vel
+        return self._robot_data_to_torch(self.robot.data.joint_vel)
+
+    def _robot_data_to_torch(self, value) -> torch.Tensor:
+        if torch.is_tensor(value):
+            return value
+        return wp.to_torch(value).to(device=self.device)
 
     @property
     def robot_body_pos_w(self) -> torch.Tensor:
-        return self.robot.data.body_pos_w[:, self.body_indexes]
+        return self._robot_data_to_torch(self.robot.data.body_pos_w)[:, self.body_indexes]
 
     @property
     def robot_body_quat_w(self) -> torch.Tensor:
-        return self.robot.data.body_quat_w[:, self.body_indexes]
+        return self._robot_data_to_torch(self.robot.data.body_quat_w)[:, self.body_indexes]
 
     @property
     def robot_body_lin_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_lin_vel_w[:, self.body_indexes]
+        return self._robot_data_to_torch(self.robot.data.body_lin_vel_w)[:, self.body_indexes]
 
     @property
     def robot_body_ang_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_ang_vel_w[:, self.body_indexes]
+        return self._robot_data_to_torch(self.robot.data.body_ang_vel_w)[:, self.body_indexes]
 
     @property
     def robot_anchor_pos_w(self) -> torch.Tensor:
-        return self.robot.data.body_pos_w[:, self.robot_anchor_body_index]
+        return self._robot_data_to_torch(self.robot.data.body_pos_w)[:, self.robot_anchor_body_index]
 
     @property
     def robot_anchor_quat_w(self) -> torch.Tensor:
-        return self.robot.data.body_quat_w[:, self.robot_anchor_body_index]
+        return self._robot_data_to_torch(self.robot.data.body_quat_w)[:, self.robot_anchor_body_index]
 
     @property
     def robot_anchor_lin_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_lin_vel_w[:, self.robot_anchor_body_index]
+        return self._robot_data_to_torch(self.robot.data.body_lin_vel_w)[:, self.robot_anchor_body_index]
 
     @property
     def robot_anchor_ang_vel_w(self) -> torch.Tensor:
-        return self.robot.data.body_ang_vel_w[:, self.robot_anchor_body_index]
+        return self._robot_data_to_torch(self.robot.data.body_ang_vel_w)[:, self.robot_anchor_body_index]
 
     def _update_metrics(self):
         self.metrics["error_anchor_pos"] = torch.norm(self.anchor_pos_w - self.robot_anchor_pos_w, dim=-1)
@@ -592,10 +598,10 @@ class MotionCommand(CommandTerm):
 
         joint_pos += sample_uniform(*self.cfg.joint_position_range, joint_pos.shape, joint_pos.device)
         if self._reset_exclude_joint_ids is not None and self._reset_exclude_joint_ids.numel() > 0:
-            default_joint_pos = self.robot.data.default_joint_pos[env_ids]
+            default_joint_pos = self._robot_data_to_torch(self.robot.data.default_joint_pos)[env_ids]
             joint_pos[:, self._reset_exclude_joint_ids] = default_joint_pos[:, self._reset_exclude_joint_ids]
             joint_vel[:, self._reset_exclude_joint_ids] = 0.0
-        soft_joint_pos_limits = self.robot.data.soft_joint_pos_limits[env_ids]
+        soft_joint_pos_limits = self._robot_data_to_torch(self.robot.data.soft_joint_pos_limits)[env_ids]
         joint_pos = torch.clip(joint_pos, soft_joint_pos_limits[:, :, 0], soft_joint_pos_limits[:, :, 1])
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
         self.robot.write_root_state_to_sim(

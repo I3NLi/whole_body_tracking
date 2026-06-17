@@ -5,6 +5,7 @@
 
 import os
 import torch
+import warp as wp
 
 import onnx
 
@@ -12,6 +13,14 @@ from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab_rl.rsl_rl.exporter import _OnnxPolicyExporter
 
 from whole_body_tracking.tasks.tracking.mdp import MotionCommand
+
+
+def _to_torch(value, device: str | torch.device | None = None) -> torch.Tensor:
+    if torch.is_tensor(value):
+        tensor = value
+    else:
+        tensor = wp.to_torch(value)
+    return tensor.to(device=device) if device is not None else tensor
 
 
 def export_motion_policy_as_onnx(
@@ -99,16 +108,20 @@ def attach_onnx_metadata(env: ManagerBasedRLEnv, run_path: str, path: str, filen
             history_length = term_cfg["history_length"]
             observation_history_lengths.append(1 if history_length == 0 else history_length)
 
+    default_joint_pos = getattr(env.scene["robot"].data, "default_joint_pos_nominal", None)
+    if default_joint_pos is None:
+        default_joint_pos = _to_torch(env.scene["robot"].data.default_joint_pos)[0]
+
     metadata = {
         "run_path": run_path,
         "joint_names": env.scene["robot"].data.joint_names,
-        "joint_stiffness": env.scene["robot"].data.joint_stiffness[0].cpu().tolist(),
-        "joint_damping": env.scene["robot"].data.joint_damping[0].cpu().tolist(),
-        "default_joint_pos": env.scene["robot"].data.default_joint_pos_nominal.cpu().tolist(),
+        "joint_stiffness": _to_torch(env.scene["robot"].data.joint_stiffness)[0].cpu().tolist(),
+        "joint_damping": _to_torch(env.scene["robot"].data.joint_damping)[0].cpu().tolist(),
+        "default_joint_pos": _to_torch(default_joint_pos).cpu().tolist(),
         "command_names": env.command_manager.active_terms,
         "observation_names": observation_names,
         "observation_history_lengths": observation_history_lengths,
-        "action_scale": env.action_manager.get_term("joint_pos")._scale[0].cpu().tolist(),
+        "action_scale": _to_torch(env.action_manager.get_term("joint_pos")._scale)[0].cpu().tolist(),
         "anchor_body_name": env.command_manager.get_term("motion").cfg.anchor_body_name,
         "body_names": env.command_manager.get_term("motion").cfg.body_names,
     }

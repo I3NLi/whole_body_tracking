@@ -681,6 +681,20 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             env_cfg.commands.motion.debug_vis = False
         if args_cli.hide_contact_debug_vis and getattr(env_cfg.scene, "contact_forces", None) is not None:
             env_cfg.scene.contact_forces.debug_vis = False
+    if getattr(env_cfg, "events", None) is not None:
+        for event_name in (
+            "physics_material",
+            "collider_offsets",
+            "add_joint_default_pos",
+            "base_com",
+            "mass_scale",
+            "actuator_gains",
+            "joint_params",
+            "gravity",
+            "push_robot",
+        ):
+            if hasattr(env_cfg.events, event_name):
+                setattr(env_cfg.events, event_name, None)
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
@@ -722,7 +736,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     export_motion_policy_as_onnx(
         env.unwrapped,
         ppo_runner.alg.policy,
-        normalizer=ppo_runner.obs_normalizer,
+        normalizer=getattr(ppo_runner, "obs_normalizer", None),
         path=export_model_dir,
         filename="policy.onnx",
     )
@@ -730,8 +744,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     attach_onnx_metadata(env.unwrapped, run_dir, export_model_dir)
 
     # reset environment
-    obs, _ = env.get_observations()
-    reference_marker_handles = _get_reference_marker_handles(env)
+    obs = env.get_observations()
+    if isinstance(obs, tuple):
+        obs, _ = obs
+    reference_marker_handles = None
+    if not args_cli.headless and not args_cli.hide_motion_debug_vis:
+        reference_marker_handles = _get_reference_marker_handles(env)
     timestep = 0
     # simulate environment
     while simulation_app.is_running():
@@ -740,7 +758,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                 _, motion_command, anchor_markers, body_markers = reference_marker_handles
                 _sync_reference_markers(motion_command, anchor_markers, body_markers)
             actions = policy(obs)
-            obs, _, _, _ = env.step(actions)
+            step_result = env.step(actions)
+            obs = step_result[0]
         if args_cli.video:
             timestep += 1
             if timestep == args_cli.video_length:

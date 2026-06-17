@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+import warp as wp
 from typing import TYPE_CHECKING
 
 import isaaclab.utils.math as math_utils
@@ -13,6 +14,14 @@ from isaaclab.managers import SceneEntityCfg
 
 from whole_body_tracking.tasks.tracking.mdp.commands import MotionCommand
 from whole_body_tracking.tasks.tracking.mdp.rewards import _get_body_indexes
+
+
+def _to_torch(value, device: str | torch.device | None = None) -> torch.Tensor:
+    if torch.is_tensor(value):
+        tensor = value
+    else:
+        tensor = wp.to_torch(value)
+    return tensor.to(device=device) if device is not None else tensor
 
 
 def bad_anchor_pos(env: ManagerBasedRLEnv, command_name: str, threshold: float) -> torch.Tensor:
@@ -30,12 +39,12 @@ def non_finite_robot_state(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = S
     """
     asset: Articulation = env.scene[asset_cfg.name]
     checks = (
-        asset.data.root_state_w,
-        asset.data.body_state_w,
-        asset.data.joint_pos,
-        asset.data.joint_vel,
+        _to_torch(asset.data.root_state_w),
+        _to_torch(asset.data.body_state_w),
+        _to_torch(asset.data.joint_pos),
+        _to_torch(asset.data.joint_vel),
     )
-    bad = torch.zeros(asset.data.root_state_w.shape[0], dtype=torch.bool, device=asset.data.root_state_w.device)
+    bad = torch.zeros(checks[0].shape[0], dtype=torch.bool, device=checks[0].device)
     for value in checks:
         bad |= ~torch.isfinite(value.flatten(start_dim=1)).all(dim=1)
     return bad
@@ -91,9 +100,10 @@ def bad_anchor_ori(
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
 
     command: MotionCommand = env.command_manager.get_term(command_name)
-    motion_projected_gravity_b = math_utils.quat_apply_inverse(command.anchor_quat_w, asset.data.GRAVITY_VEC_W)
+    gravity_vec_w = _to_torch(asset.data.GRAVITY_VEC_W, command.anchor_quat_w.device)
+    motion_projected_gravity_b = math_utils.quat_apply_inverse(command.anchor_quat_w, gravity_vec_w)
 
-    quat_apply_inverse = math_utils.quat_apply_inverse(command.robot_anchor_quat_w, asset.data.GRAVITY_VEC_W)
+    quat_apply_inverse = math_utils.quat_apply_inverse(command.robot_anchor_quat_w, gravity_vec_w)
 
     violation = (motion_projected_gravity_b[:, 2] - quat_apply_inverse[:, 2]).abs() > threshold
     return _apply_hold_seconds(env, "anchor_ori", violation, hold_seconds)
