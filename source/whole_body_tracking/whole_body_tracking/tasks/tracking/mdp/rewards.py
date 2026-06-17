@@ -17,13 +17,6 @@ def _get_body_indexes(command: MotionCommand, body_names: list[str] | None) -> l
     return [i for i, name in enumerate(command.cfg.body_names) if (body_names is None) or (name in body_names)]
 
 
-def _get_body_index(command: MotionCommand, body_name: str) -> int:
-    try:
-        return command.cfg.body_names.index(body_name)
-    except ValueError as exc:
-        raise ValueError(f"Body {body_name!r} is not configured in motion body_names.") from exc
-
-
 def motion_global_anchor_position_error_exp(env: ManagerBasedRLEnv, command_name: str, std: float) -> torch.Tensor:
     command: MotionCommand = env.command_manager.get_term(command_name)
     error = torch.sum(torch.square(command.anchor_pos_w - command.robot_anchor_pos_w), dim=-1)
@@ -113,34 +106,6 @@ def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, thresh
     last_contact_time = contact_sensor.data.last_contact_time[:, sensor_cfg.body_ids]
     reward = torch.sum((last_contact_time < threshold) * first_air, dim=-1)
     return reward
-
-
-def reward_center_of_mass(
-    env: ManagerBasedRLEnv,
-    command_name: str,
-    sigma_com: float = 0.1,
-    single_support_height: float = 0.05,
-    double_support_reward: float = 1.0,
-    left_foot_body: str = "left_ankle_roll_link",
-    right_foot_body: str = "right_ankle_roll_link",
-) -> torch.Tensor:
-    """Reward the anchor projection staying near the lower support foot in single-support phases."""
-    command: MotionCommand = env.command_manager.get_term(command_name)
-
-    left_idx = _get_body_index(command, left_foot_body)
-    right_idx = _get_body_index(command, right_foot_body)
-    left_pos = command.robot_body_pos_w[:, left_idx]
-    right_pos = command.robot_body_pos_w[:, right_idx]
-
-    single_support = torch.abs(left_pos[:, 2] - right_pos[:, 2]) > single_support_height
-    left_is_support = left_pos[:, 2] < right_pos[:, 2]
-    support_xy = torch.where(left_is_support.unsqueeze(-1), left_pos[:, :2], right_pos[:, :2])
-    com_xy = command.robot_anchor_pos_w[:, :2]
-    error_sq = torch.sum(torch.square(com_xy - support_xy), dim=-1)
-
-    sigma_sq = max(float(sigma_com), 1.0e-6) ** 2
-    reward = torch.exp(-error_sq / sigma_sq)
-    return torch.where(single_support, reward, torch.full_like(reward, float(double_support_reward)))
 
 
 def feet_double_air_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float = 0.35) -> torch.Tensor:
