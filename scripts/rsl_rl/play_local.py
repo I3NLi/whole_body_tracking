@@ -677,6 +677,26 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                       "If this task needs motion data, please specify --motion_file <path>.")
 
     if getattr(getattr(env_cfg, "commands", None), "motion", None) is not None:
+        env_cfg.commands.motion.pose_range = {
+            "x": (0.0, 0.0),
+            "y": (0.0, 0.0),
+            "z": (0.0, 0.0),
+            "roll": (0.0, 0.0),
+            "pitch": (0.0, 0.0),
+            "yaw": (0.0, 0.0),
+        }
+        env_cfg.commands.motion.velocity_range = {
+            "x": (0.0, 0.0),
+            "y": (0.0, 0.0),
+            "z": (0.0, 0.0),
+            "roll": (0.0, 0.0),
+            "pitch": (0.0, 0.0),
+            "yaw": (0.0, 0.0),
+        }
+        env_cfg.commands.motion.joint_position_range = (0.0, 0.0)
+        env_cfg.commands.motion.motion_start_step = 0
+        print("[INFO]: Disabled motion reset pose/velocity/joint randomization for playback.")
+        print("[INFO]: Fixed playback motion reset start step to 0.")
         if args_cli.hide_motion_debug_vis:
             env_cfg.commands.motion.debug_vis = False
         if args_cli.hide_contact_debug_vis and getattr(env_cfg.scene, "contact_forces", None) is not None:
