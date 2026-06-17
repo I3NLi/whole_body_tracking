@@ -1,0 +1,1000 @@
+  963  cd unitree_sdk2
+  964  cd ~
+  965  cd unitree_sdk2
+  966  rm -rf build
+  967  mkdir build && cd build
+  968  cmake .. -DBUILD_EXAMPLES=OFF
+  969  sudo make install
+  970  cd /home/hiyio/IsaacLab/TAlab/deploy/robots/g1_29dof
+  971  mkdir build && cd build
+  972  cmake .. && make
+  973  ./g1_ctrl --network=enp5s0
+  974  cd ~/unitree_sdk2
+  975  rm -rf build
+  976  mkdir build && cd build
+  977  cmake .. -DCMAKE_INSTALL_PREFIX=/opt/unitree_robotics
+  978  sudo make install
+  979  cd ..
+  980  rm -rf build
+  981  sudo rm -rf build
+  982  mkdir build && cd build
+  983  cmake .. -DBUILD_EXAMPLES=OFF
+  984  sudo make install
+  985  cd /home/hiyio/IsaacLab/TAlab/deploy/robots/g1_29dof
+  986  mkdir build && cd build
+  987  cmake .. -DCMAKE_INSTALL_PREFIX=/opt/unitree_robotics
+  988  make
+  989  ./g1_ctrl --network=enp5s
+  990  cd ..
+  991  rm -rf build
+  992  mkdir build && cd build
+  993  cmake .. 
+  994  make
+  995  ./g1_ctrl --network=enp5s0
+  996  sudo journalctl -xe
+  997  sudo dmesg -T|tail -n 50
+  998  sudo dmesg | grep -E "lockup|hung|bug|trace|panic"
+  999  sudo journalctl -b -1 | grep -E "error|fail|warn|gpu|lockup|panic|hung"
+ 1000  nvidia-smi
+ 1001  conda env list
+ 1002  conda activate BeyondMimic
+ 1003  python scripts/rsl_rl/train.py --task=Tracking-Flat-G1-v0 --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4 --headless --logger wandb --log_project_name csv_to_npz --run_name train_dance2_subject4
+ 1004  python scripts/rsl_rl/train.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4 --headless --logger wandb --log_project_name csv_to_npz --run_name train_dance2_subject4
+ 1005  export HYDRA_FULL_ERROR=1
+ 1006  python - <<'PY'
+ 1007  import torch, sys
+ 1008  print("Torch:", torch.__version__, "CUDA:", torch.version.cuda)
+ 1009  print("Compile/Inductor enabled?", hasattr(torch, "compile"))
+ 1010  PY
+ 1011  python scripts/rsl_rl/train.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4 --headless --logger wandb --log_project_name csv_to_npz --run_name train_dance2_subject4 --checkpoint=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-10-14_09-57-19_train_dance2_subject4/model_8000.pt
+ 1012  python scripts/rsl_rl/train.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4 --headless --logger wandb --log_project_name csv_to_npz --run_name train_dance2_subjecect4
+ 1013  python scripts/rsl_rl/train.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4 --headless --logger wandb --log_project_name csv_to_npz --run_name train_dance2_subject4 --checkpoint=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-10-14_09-57-19_train_dance2_subject4/model_8000.pt
+ 1014  python scripts/rsl_rl/train.py -h | sed -n '1,120p'
+ 1015  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4   --resume True 
+ 1016  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --experiment_name g1_flat   --run_name train_dance2_subject4_resume_from_8000   --resume True   --load_run 2025-10-14_09-57-19_train_dance2_subject4   --load_checkpoint model_8000.pt
+ 1017  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --experiment_name g1_flat   --run_name train_dance2_subject4_resume_from_8000   --resume True   --load_run 2025-10-14_09-57-19_train_dance2_subject4   --checkpoint model_8000.pt
+ 1018  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_8000   --resume True   --load_run 2025-10-14_09-57-19_train_dance2_subject4   --checkpoint model_8000.pt
+ 1019  nvidia-smi
+ 1020  cd /home/hiyio/IsaacLab/TAlab
+ 1021  conda activate TAlab
+ 1022  cd /home/hiyio/IsaacLab/TAlab
+ 1023  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity
+ 1024  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless
+ 1025  nvidia-smi
+ 1026  conda activate cusrl
+ 1027  cd /home/hiyio/IsaacLab/TAlab
+ 1028  conda activate TAlab
+ 1029  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1030  conda activate BeyondMimic
+ 1031  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_8000   --resume True   --load_run 2025-10-14_09-57-19_train_dance2_subject4   --checkpoint model_8000.pt
+ 1032  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_9000   --resume True   --load_run 2025-10-14_09-57-19_train_dance2_subject4   --checkpoint model_9000.pt
+ 1033  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_9000   --resume True   --load_run 2025-10-14_15-07-09_train_dance2_subject4   --checkpoint model_9000.pt
+ 1034  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_9030k --resume True   --load_run 2025-10-14_15-54-46_train_dance2_subject4   --checkpoint model_9031500.pt
+ 1035  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_9030k --resume True   --load_run 2025-10-14_15-54-46_train_dance2_subject4   --checkpoint model_31500.pt
+ 1036  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_60K --resume True   --load_run 2025-10-15_09-20-41_train_dance2_subject4   --checkpoint model_61499.pt
+ 1037  cd whole_body_tracking/
+ 1038  ls
+ 1039  cd  whole_body_tracking
+ 1040  ls
+ 1041  cd tasks/
+ 1042  ls
+ 1043  cd tracking/
+ 1044  ls
+ 1045  cd mdp/
+ 1046  ls
+ 1047  conda activate TAlab
+ 1048  cd /home/hiyio/IsaacLab/TAlab/deploy/robots/g1_29dof/build
+ 1049  ./g1_ctrl --network=enp5s0
+ 1050  cd /home/hiyio/IsaacLab/TAlab
+ 1051  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity --headless 
+ 1052  ls /home/hiyio/IsaacLab/TAlab/talab/logs/rsl_rl/unitree_g1_29dof_velocity
+ 1053  cd talab
+ 1054  python scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1055  python scripts/play.py --task=Unitree-G1-29dof-Velocity --headless
+ 1056  cd ..
+ 1057  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity --headless
+ 1058  cd /home/hiyio/IsaacLab/TAlab/deploy/robots/g1_29dof/build
+ 1059  ./g1_ctrl --network=enp5s0
+ 1060  ./g1_ctrl --network enp5s0
+ 1061  nvidia-smi
+ 1062  conda activate BeyondMimic
+ 1063  history
+ 1064  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_60K --resume True   --load_run 2025-10-16_11-39-55_train_dance2_subject4   --checkpoint model_62000.pt
+ 1065  conda activate cusrl
+ 1066  cd /home/hiyio/IsaacLab/TAlab
+ 1067  conda activate TAlab
+ 1068  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity --headless
+ 1069  cd ..
+ 1070  python scripts/play.py --task=Unitree-G1-29dof-Velocity --headless
+ 1071  cd TAlab/talab
+ 1072  python scripts/play.py --task=Unitree-G1-29dof-Velocity --headless
+ 1073  cd ../..
+ 1074  python TAlab/talab/scripts/play.py --task=Unitree-G1-29dof-Velocity
+ 1075  cd /home/hiyio/IsaacLab/TAlab
+ 1076  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity
+ 1077  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless
+ 1078  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1079  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1080  conda activate BeyondMimic
+ 1081  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/0go9til7
+ 1082  ifconfig
+ 1083  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/0go9til7
+ 1084  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/ej225rso
+ 1085  nvidia-smi
+ 1086  grep -R "domain_rand" source/isaaclab_tasks/isaaclab_tasks/config/tasks/Tracking-Flat-G1-v0.yaml
+ 1087  grep -R "domain_rand" source/isaaclab_tasks/isaaclab_tasks/config/tasks
+ 1088  PWD
+ 1089  pwd
+ 1090  grep -R "domain_rand" /home/hiyio/whole_body_tracking/source/isaaclab_tasks/isaaclab_tasks/config/tasks/Tracking-Flat-G1-v0.yaml
+ 1091  grep -R "domain_rand" /home/hiyio/whole_body_tracking/source/whole_body_tracking/whole_body_tracking/tasks/tracking/tracking_env_cfg.py
+ 1092  grep -R "domain_rand" /home/hiyio/whole_body_tracking/source/whole_body_tracking/whole_body_tracking/tasks/tracking/config | grep -v "#"
+ 1093  grep -R "domain_rand" /home/hiyio/whole_body_tracking | grep "Tracking-Flat-G1-v0.yaml"
+ 1094  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/dr7j2is2
+ 1095  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_60K --resume True   --load_run 2025-10-16_11-39-55_train_dance2_subject4   --checkpoint model_62000.pt
+ 1096  conda activate TAlab
+ 1097  nvidia-smi
+ 1098  conda activate TAlab
+ 1099  cd /home/hiyio/IsaacLab/TAlab
+ 1100  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1101  conda deactivate
+ 1102  conda activate Beyondmimic
+ 1103  conda activate BeyondMimic
+ 1104  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_60K --resume True   --load_run 2025-10-16_11-39-55_train_dance2_subject4   --checkpoint model_62000.pt
+ 1105  conda activate BeyondMimic
+ 1106  history
+ 1107  python scripts/rsl_rl/play.py --task= Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/esabv7l9
+ 1108  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/esabv7l9
+ 1109  history
+ 1110  conda activate TAlab
+ 1111  cd /home/hiyio/IsaacLab/TAlab
+ 1112  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1113  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1114  conda activate cusrl
+ 1115  nvdia-smi
+ 1116  nvidia-smi
+ 1117  conda deactivate
+ 1118  mkdir -p ~/colcon_ws/src
+ 1119  cd ~/colcon_ws/src
+ 1120  git clone https://github.com/qiayuanl/unitree_bringup.git
+ 1121  git clone https://github.com/HybridRobotics/motion_tracking_controller.git
+ 1122  cd ../
+ 1123  rosdep install --from-paths src --ignore-src -r -y
+ 1124  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to unitree_bringup
+ 1125  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to motion_tracking_controller
+ 1126  source install/setup.bash
+ 1127  sudo apt update
+ 1128  sudo apt install -y python3-colcon-common-extensions
+ 1129  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to unitree_bringup
+ 1130  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to motion_tracking_controller
+ 1131  source install/setup.bash
+ 1132  source /opt/ros/$ROS_DISTRO/setup.bash
+ 1133  source /opt/ros/humble/setup.bash
+ 1134  sudo apt update
+ 1135  sudo apt install -y   ros-humble-pluginlib   ros-humble-class-loader
+ 1136  sudo apt install -y ros-humble-controller-interface ros-humble-ros2-control
+ 1137  grep -R "pluginlib_export_plugin_description_file" /opt/ros/humble/share/pluginlib/cmake -n
+ 1138  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to unitree_bringup
+ 1139  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to motion_tracking_controller
+ 1140  ros2 launch motion_tracking_controller mujoco.launch.py wandb_path:=xboninglix-technical-university-of-munich/csv_to_npz/64bpnf3d
+ 1141  source /opt/ros/humble/setup.bash
+ 1142  colcon build   --symlink-install   --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo   --packages-up-to unitree_bringup motion_tracking_controller
+ 1143  cd ~/colcon_ws/src/motion_tracking_controller
+ 1144  grep -q "find_package(pluginlib" CMakeLists.txt || sed -i '/find_package(ament_cmake REQUIRED)/a find_package(pluginlib REQUIRED)' CMakeLists.txt
+ 1145  grep -q "<depend>pluginlib</depend>" package.xml || sed -i '/<buildtool_depend>ament_cmake<\/buildtool_depend>/a \  <depend>pluginlib</depend>' package.xml
+ 1146  cd ~/colcon_ws
+ 1147  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo --packages-select motion_tracking_controller
+ 1148  cat ~/colcon_ws/src/motion_tracking_controller/CMakeLists.txt | head -n 25
+ 1149  ls ~/colcon_ws/src/legged_rl_controllers
+ 1150  # Add debian source
+ 1151  echo "deb [trusted=yes] https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/ ./" | sudo tee /etc/apt/sources.list.d/qiayuanl_unitree_buildfarm.list
+ 1152  echo "yaml https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/local.yaml humble" | sudo tee /etc/ros/rosdep/sources.list.d/1-qiayuanl_unitree_buildfarm.list
+ 1153  sudo apt-get update
+ 1154  # Install packages
+ 1155  sudo apt-get install ros-humble-unitree-description
+ 1156  sudo apt-get install ros-humble-unitree-systems
+ 1157  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to unitree_bringup
+ 1158  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to motion_tracking_controller
+ 1159  source install/setup.bash
+ 1160  rosdep install --from-paths src --ignore-src -r -y
+ 1161  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to unitree_bringup
+ 1162  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelwithDebInfo --packages-up-to motion_tracking_controller
+ 1163  ls ~/colcon_ws/src/legged_rl_controllers
+ 1164  cd ~/colcon_ws/src
+ 1165  git clone https://github.com/qiayuanl/unitree_bringup.git
+ 1166  git clone https://github.com/HybridRobotics/motion_tracking_controller.git
+ 1167  ls
+ 1168  git clone https://github.com/unitreerobotics/unitree_ros2.git
+ 1169  cd unitree_ros2
+ 1170  git submodule update --init --recursive
+ 1171  cd ~/colcon_ws
+ 1172  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo --packages-select legged_rl_controllers
+ 1173  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo --packages-select motion_tracking_controller
+ 1174  cd ..
+ 1175  echo "deb [trusted=yes] https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/ ./" | sudo tee /etc/apt/sources.list.d/qiayuanl_unitree_buildfarm.list
+ 1176  echo "yaml https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/local.yaml humble" | sudo tee /etc/ros/rosdep/sources.list.d/1-qiayuanl_unitree_buildfarm.list
+ 1177  sudo apt update
+ 1178  sudo apt install -y ros-humble-unitree-description ros-humble-unitree-systems
+ 1179  cd ~/colcon_ws/src
+ 1180  rm -rf motion_tracking_controller
+ 1181  git clone https://github.com/HybridRobotics/motion_tracking_controller.git
+ 1182  cd ~/colcon_ws
+ 1183  rosdep install --from-paths src --ignore-src -r -y
+ 1184  rm -rf build install log
+ 1185  source /opt/ros/humble/setup.bash
+ 1186  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo --packages-up-to unitree_bringup
+ 1187  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo --packages-up-to motion_tracking_controller
+ 1188  source /opt/ros/humble/setup.bash
+ 1189  PKG=~/colcon_ws/src/motion_tracking_controller/CMakeLists.txt
+ 1190  grep -q 'find_package(pluginlib' "$PKG" ||   sed -i '/find_package(ament_cmake REQUIRED)/a find_package(pluginlib REQUIRED)' "$PKG"
+ 1191  grep -q 'pluginlib_export_plugin_description_file.cmake' "$PKG" ||   sed -i '/find_package(pluginlib REQUIRED)/a include("${pluginlib_DIR}/pluginlib_export_plugin_description_file.cmake")' "$PKG"
+ 1192  grep -q 'find_package(controller_interface' "$PKG" ||   sed -i '/find_package(class_loader REQUIRED)/a find_package(controller_interface REQUIRED)' "$PKG" 2>/dev/null || true
+ 1193  rm -rf build install log
+ 1194  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo --packages-select motion_tracking_controller
+ 1195  # 0) 清一下环境里的坏路径并 source Humble
+ 1196  unset AMENT_PREFIX_PATH CMAKE_PREFIX_PATH COLCON_CURRENT_PREFIX
+ 1197  source /opt/ros/humble/setup.bash
+ 1198  # 1) 进入包目录并备份 CMakeLists.txt
+ 1199  cd ~/colcon_ws/src/motion_tracking_controller
+ 1200  cp -a CMakeLists.txt CMakeLists.txt.bak.$(date +%s)
+ 1201  # 2) 用“最小可行”版本覆盖 CMakeLists.txt
+ 1202  cat > CMakeLists.txt <<'CMAKE'
+ 1203  cmake_minimum_required(VERSION 3.8)
+ 1204  project(motion_tracking_controller)
+ 1205  # 基础
+ 1206  find_package(ament_cmake REQUIRED)
+ 1207  find_package(rclcpp REQUIRED)
+ 1208  find_package(pluginlib REQUIRED)
+ 1209  find_package(class_loader REQUIRED)
+ 1210  # 如果你是 ros2_control 控制器，请保留下一行；否则可注释掉
+ 1211  find_package(controller_interface REQUIRED)
+ 1212  # 强制把 pluginlib 的导出宏引进来（解决 Unknown CMake command）
+ 1213  include("${pluginlib_DIR}/pluginlib_export_plugin_description_file.cmake")
+ 1214  # 目标库
+ 1215  add_library(${PROJECT_NAME} SHARED
+ 1216    src/MotionCommand.cpp
+ 1217    src/MotionOnnxPolicy.cpp
+ 1218    src/MotionTrackingController.cpp
+ 1219  )
+ 1220  target_include_directories(${PROJECT_NAME} PUBLIC
+ 1221    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+ 1222    $<INSTALL_INTERFACE:include>
+ 1223  )
+ 1224  ament_target_dependencies(${PROJECT_NAME}
+ 1225    rclcpp
+ 1226    pluginlib
+ 1227    class_loader
+ 1228    controller_interface
+ 1229  )
+ 1230  # 如果你是 ros2_control 控制器插件：基类包写 controller_interface
+ 1231  pluginlib_export_plugin_description_file(controller_interface
+ 1232    motion_tracking_controller_plugins.xml)
+ 1233  # 安装
+ 1234  install(TARGETS ${PROJECT_NAME}
+ 1235    ARCHIVE DESTINATION lib
+ 1236    LIBRARY DESTINATION lib
+ 1237    RUNTIME DESTINATION bin
+ 1238  )
+ 1239  install(DIRECTORY include/ DESTINATION include)
+ 1240  install(FILES motion_tracking_controller_plugins.xml
+ 1241    DESTINATION share/${PROJECT_NAME})
+ 1242  ament_package()
+ 1243  CMAKE
+ 1244  # 3) 如果还没有插件 XML，就写一个示例（按你的类名/命名空间改）
+ 1245  cat > motion_tracking_controller_plugins.xml <<'XML'
+ 1246  <library path="motion_tracking_controller">
+ 1247    <class
+ 1248      name="motion_tracking_controller/MotionTrackingController"
+ 1249      type="motion_tracking_controller::MotionTrackingController"
+ 1250      base_class_type="controller_interface::ControllerInterface"
+ 1251      description="Motion tracking controller"/>
+ 1252  </library>
+ 1253  XML
+ 1254  # 4) 回到工作区清理并编译（注意大小写：RelWithDebInfo）
+ 1255  cd ~/colcon_ws
+ 1256  rm -rf build install log
+ 1257  source /opt/ros/humble/setup.bash
+ 1258  colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo --packages-select motion_tracking_controller
+ 1259  ls /opt/ros/humble/share/pluginlib/cmake/pluginlib_export_plugin_description_file.cmake
+ 1260  conda activate TAlab
+ 1261  cd /home/hiyio/IsaacLab/TAlab
+ 1262  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1263  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1264  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1265  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1266  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_80K   --resume True   --load_run 2025-10-16_14-51-03_train_dance2_subject4   --checkpoint model_117999.pt   agent.rsl_rl.ppo.num_learning_iterations=160000
+ 1267  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1268  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1269  nvidia-smi
+ 1270  ros2 run demo_nodes_py listener
+ 1271  echo "deb [trusted=yes] https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/ ./" | sudo tee /etc/apt/sources.list.d/qiayuanl_unitree_buildfarm.list
+ 1272  echo "yaml https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/local.yaml humble" | sudo tee /etc/ros/rosdep/sources.list.d/1-qiayuanl_unitree_buildfarm.list
+ 1273  lsb_release -a
+ 1274  uname -m
+ 1275  sudo apt update
+ 1276  sudo apt install -y locales software-properties-common curl
+ 1277  sudo locale-gen en_US en_US.UTF-8
+ 1278  sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+ 1279  export LANG=en_US.UTF-8
+ 1280  sudo add-apt-repository universe
+ 1281  sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key   -o /usr/share/keyrings/ros-archive-keyring.gpg
+ 1282  echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+ 1283  http://packages.ros.org/ros2/ubuntu jammy main" | sudo tee /etc/apt/sources.list.d/ros2.list
+ 1284  sudo apt update
+ 1285  sudo apt install -y ros-humble-desktop
+ 1286  source /opt/ros/humble/setup.bash
+ 1287  echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+ 1288  sudo apt install -y python3-rosdep
+ 1289  sudo rosdep init
+ 1290  rosdep update
+ 1291  echo "deb [trusted=yes] https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/ ./" | sudo tee /etc/apt/sources.list.d/qiayuanl_unitree_buildfarm.list
+ 1292  echo "yaml https://github.com/qiayuanl/unitree_buildfarm/raw/jammy-humble-amd64/local.yaml humble" | sudo tee /etc/ros/rosdep/sources.list.d/1-qiayuanl_unitree_buildfarm.list
+ 1293  sudo sed -i 's|http://packages.ros.org/ros2/ubuntu|https://packages.ros.org/ros2/ubuntu|g' /etc/apt/sources.list.d/ros2.list
+ 1294  sudo apt update
+ 1295  sudo apt install -y python3-rosdep
+ 1296  sudo curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key   -o /usr/share/keyrings/ros-archive-keyring.gpg
+ 1297  echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu/ jammy main" | sudo tee /etc/apt/sources.list.d/ros2.list
+ 1298  sudo apt update
+ 1299  echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu jammy main' | sudo tee /etc/apt/sources.list.d/ros2.list
+ 1300  grep -R "qiayuanl/unitree_buildfarm" /etc/apt/sources.list* /etc/apt/sources.list.d/ || true
+ 1301  conda deactivate
+ 1302  sudo rm -f /etc/apt/sources.list.d/qiayuanl_unitree_buildfarm.list
+ 1303  sudo apt clean
+ 1304  sudo rm -rf /var/lib/apt/lists/*
+ 1305  sudo apt update
+ 1306  sudo apt install -y python3-rosdep
+ 1307  sudo rosdep init
+ 1308  rosdep update
+ 1309  rosdep --version
+ 1310  which ros2
+ 1311  ros2 --help
+ 1312  dpkg -l | grep '^ii  ros-humble'
+ 1313  ros2 run demo_nodes_cpp talker
+ 1314  conda activate cusrl
+ 1315  conda activate TAlab
+ 1316  cd /home/hiyio/IsaacLab/TAlab
+ 1317  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1318  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1319  conda activate BeyondMimic
+ 1320  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/ig7psiq3
+ 1321  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/up258d6i
+ 1322  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/up258d6i
+ 1323  conda activate BeyondMimic
+ 1324  pwd
+ 1325  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_80K   --resume True   --load_run 2025-10-16_14-51-03_train_dance2_subject4   --checkpoint model_117999.pt   agent.rsl_rl.ppo.num_learning_iterations=160000
+ 1326  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/esabv7l9
+ 1327  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_11K   --resume True   --load_run 2025-10-17_11-35-53_train_dance2_subject4   --checkpoint model_117999.pt \ 
+ 1328  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_11K   --resume True   --load_run 2025-10-17_11-35-53_train_dance2_subject4   --checkpoint model_117999.pt \ 
+ 1329  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_11K   --resume True   --load_run 2025-10-17_11-35-53_train_dance2_subject4   --checkpoint model_117999.pt \ 
+ 1330  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_11K   --resume True   --load_run 2025-10-17_11-35-53_train_dance2_subject4   --checkpoint model_117999.pt \ 
+ 1331  python scripts/rsl_rl/train.py -h
+ 1332  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_11K   --resume True   --load_run 2025-10-17_11-35-53_train_dance2_subject4   --checkpoint model_117999.pt   agent.rsl_rl.ppo.num_learning_iterations=160000
+ 1333  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/ig7psiq3
+ 1334  [200~python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_12K --resume True   --load_run 2025-10-18_19-03-33_train_dance2_subject4   --checkpoint model_120500.pt ~
+ 1335  # 1) 看 rewards.py 是否已有 _get_body_indexes
+ 1336  grep -n "_get_body_indexes" /home/hiyio/whole_body_tracking/source/whole_body_tracking/whole_body_tracking/tasks/tracking/mdp/rewards.py || echo "[MISS] _get_body_indexes"
+ 1337  # 2) 若缺失，用这里的最小版本追加到文件末尾（或你愿意的话放到合适的位置）
+ 1338  cat >> /home/hiyio/whole_body_tracking/source/whole_body_tracking/whole_body_tracking/tasks/tracking/mdp/rewards.py <<'PY'
+ 1339  # --- shim for terminations.py ---
+ 1340  def _get_body_indexes(command: MotionCommand, body_names: list[str] | None) -> list[int]:
+ 1341      if body_names is None:
+ 1342          return list(range(len(command.cfg.body_names)))
+ 1343      wanted = set(body_names)
+ 1344      return [i for i, name in enumerate(command.cfg.body_names) if name in wanted]
+ 1345  PY
+ 1346  [200~python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject4_resume_from_12K --resume True   --load_run 2025-10-18_19-03-33_train_dance2_subject4   --checkpoint model_120500.pt ~
+ 1347  sudo ./NVIDIA-Linux-x86_64-570.172.08.run 
+ 1348  sudo mokutil --sb-state
+ 1349  sudo mokutil --import /usr/share/nvidia/nvidia-modsign-crt-BE5A6156.der
+ 1350  sudo mokutil --list-enrolled | grep -A2 "BE:5A:61:56:56:6C:58:1D:FD:BA:20:BC:B5:74:C3:40:33:AA:BC:75"
+ 1351  sudo reboot
+ 1352  nvidia-smi
+ 1353  conda activate TAlab
+ 1354  cd /home/hiyio/IsaacLab/TAlab
+ 1355  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1356  nvidia-smi
+ 1357  nvidiasmi
+ 1358  \nvidia-smi
+ 1359  conda activate cusrl
+ 1360  nvidia-smi
+ 1361  conda activate TAlab
+ 1362  cd /home/hiyio/IsaacLab/TAlab
+ 1363  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1364  conda activate BeyondMimic
+ 1365  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/64bpnf3d
+ 1366  python - <<'PY'
+ 1367  import numpy as np, pickle, sys
+ 1368  p="/home/hiyio/Downloads/motion.npz"
+ 1369  def load_any(path):
+ 1370      if path.endswith(".npz"):
+ 1371          d=dict(np.load(path, allow_pickle=True).items())
+ 1372      else:
+ 1373          d=pickle.load(open(path,"rb"))
+ 1374          if isinstance(d,dict) and len(d)==1 and isinstance(list(d.values())[0],dict):
+ 1375              d=list(d.values())[0]
+ 1376      return d
+ 1377  d=load_any(p)
+ 1378  candidates=["dof","root_rot","root_trans","pose_aa","base_lin_vel","base_ang_vel"]
+ 1379  T=None
+ 1380  for k in candidates:
+ 1381      v=d.get(k)
+ 1382      if v is not None and hasattr(v,"shape") and len(v.shape)>=1:
+ 1383          T=int(v.shape[0]); break
+ 1384  print("motion_length =", T if T is not None else "未找到（请检查 npz 内部键）")
+ 1385  print("可选键：", [k for k in d.keys() if hasattr(d[k],'shape')])
+ 1386  PY
+ 1387  python - <<'PY'
+ 1388  import numpy as np, sys
+ 1389  p="/home/hiyio/Downloads/motion.npz"
+ 1390  d=dict(np.load(p, allow_pickle=True).items())
+ 1391  cands = ["joint_pos","joint_vel","body_pos_w","body_quat_w","body_lin_vel_w","body_ang_vel_w"]
+ 1392  shapes = {k: getattr(d.get(k), "shape", None) for k in cands if k in d}
+ 1393  T_vals = {k: (v[0] if (v and len(v)>=1) else None) for k,v in shapes.items()}
+ 1394  # 选一个可用的 T
+ 1395  T = next((t for t in T_vals.values() if isinstance(t, (int, np.integer))), None)
+ 1396  picked = next((k for k,t in T_vals.items() if t==T), None)
+ 1397  print("已检测到这些键与形状：")
+ 1398  for k,v in shapes.items():
+ 1399      print(f"  {k}: {v}")
+ 1400  print("\nmotion_length =", int(T) if T is not None else "未找到")
+ 1401  print("from key      =", picked)
+ 1402  # 一致性检查
+ 1403  uniq = {int(t) for t in T_vals.values() if t is not None}
+ 1404  if len(uniq) > 1:
+ 1405      print("[WARN] 不同键的帧数不一致：", {k:int(t) for k,t in T_vals.items() if t is not None})
+ 1406  PY
+ 1407  python - <<'PY'
+ 1408  import numpy as np
+ 1409  d=dict(np.load("/home/hiyio/Downloads/motion.npz", allow_pickle=True).items())
+ 1410  fps=float(d.get("fps", 30))
+ 1411  T=int(dict.__getitem__(d,"joint_pos").shape[0])  # 已验证 joint_pos 有 T 维
+ 1412  print("fps =", fps)
+ 1413  print("motion_length =", T)
+ 1414  print("duration_sec =", T/fps)
+ 1415  PY
+ 1416  conda activate TAlab
+ 1417  cd /home/hiyio/IsaacLab/TAlab
+ 1418  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1419  python -c "import torch; print(torch.__version__, torch.version.cuda)"
+ 1420  conda install -n TAlab pytorch==2.9.* pytorch-cuda=12.8 -c pytorch -c nvidia
+ 1421  pip uninstall torch torchaudio torchvision
+ 1422  pip3 install torch torchvision
+ 1423  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1424  conda activate cusrl
+ 1425  conda activate TAlab
+ 1426  cd /home/hiyio/IsaacLab/TAlab
+ 1427  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1428  nvidia-smi
+ 1429  conda activate BeyondMimic
+ 1430  conda activate cusrl
+ 1431  conda activate TAlab
+ 1432  cd /home/hiyio/IsaacLab/TAlab
+ 1433  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1434  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1435  conda activate TAlab
+ 1436  cd /home/hiyio/IsaacLab/TAlab
+ 1437  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1438  history
+ 1439  python -m pip install -U onnx onnxscript onnxruntime
+ 1440  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1441  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity --load_run=2025-10-17_18-45-20
+ 1442  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1443  pip uninstall torch torchvision torchaudio
+ 1444  y
+ 1445  pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+ 1446  pip uninstall onnx onnxscript onnxruntime
+ 1447  pip install onnx onnxscript onnxruntime
+ 1448  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1449  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1450  conda activate BeyondMimic
+ 1451  conda activate cusrl
+ 1452  conda activate TAlab
+ 1453  cd /home/hiyio/IsaacLab/TAlab
+ 1454  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1455  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1456  history
+ 1457  conda activate BeyondMimic
+ 1458  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/ct45i8iw
+ 1459  python - <<'PY'
+ 1460  import inspect
+ 1461  from isaaclab.isaaclab.assets.articulation import Articulation
+ 1462  print(inspect.signature(Articulation.write_joint_friction_coefficient_to_sim))
+ 1463  print(inspect.getsource(Articulation.write_joint_friction_coefficient_to_sim))
+ 1464  PY
+ 1465  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/ct45i8iw
+ 1466  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject5 --resume True   --load_run 2025-10-23_10-55-06_train_dance2_subject5   --checkpoint model_39500.pt
+ 1467  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1468  git checkout TAlab
+ 1469  conda activate TAlab
+ 1470  cd /home/hiyio/IsaacLab/TAlab
+ 1471  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1472  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1473  conda activate cusrl
+ 1474  conda activate TAlab
+ 1475  cd /home/hiyio/IsaacLab/TAlab
+ 1476  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1477  conda activate cusrl
+ 1478  conda activate TAlab
+ 1479  cd /home/hiyio/IsaacLab/TAlab
+ 1480  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1481  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1482  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1483  conda activate cusrl
+ 1484  conda activate TAlab
+ 1485  cd /home/hiyio/IsaacLab/TAlab
+ 1486  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1487  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1488  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1489  python talab/scripts/train.py --task=Unitree-G1-29dof-Velocity --headless --resume
+ 1490  conda activate cusrl
+ 1491  git checkout TAlab
+ 1492  conda activate TAlab
+ 1493  cd /home/hiyio/IsaacLab/TAlab
+ 1494  python talab/scripts/play.py --task=Unitree-G1-29dof-Velocity 
+ 1495  git a
+ 1496  git add .
+ 1497  git commit -m "update paras"
+ 1498  git push origin TAlab
+ 1499  sudo apt update && sudo apt upgrade -y
+ 1500  sudo apt install /home/hiyio/Downloads/teamviewer_15.71.4_amd64.deb
+ 1501  ifconfig
+ 1502  ping google.de
+ 1503  git clone https://github.com/I3NLi/HoloMotion.git
+ 1504  ll
+ 1505  cd HoloMotion/
+ 1506  git submodule update --init --recursive
+ 1507  ll
+ 1508  mkdir thirdparties/smpl_models
+ 1509  ll
+ 1510  mv models_smplx_v1_1.zip  thirdparties/
+ 1511  mv SMPL_python_v.1.1.0.zip  thirdparties/
+ 1512  unzip thirdparties/SMPL_python_v.1.1.0.zip -d thirdparties/smpl_models/
+ 1513  \unzip thirdparties/models_smplx_v1_1.zip -d thirdparties/smpl_models/
+ 1514  unzip thirdparties/models_smplx_v1_1.zip -d thirdparties/smpl_models/
+ 1515  ll
+ 1516  conda env create -f environments/environment_train_isaaclab_cu118.yaml
+ 1517  conda env create -f environments/environment_train_isaaclab_cu128.yaml
+ 1518  conda env create -f environments/environment_deploy.yaml
+ 1519  cd deployment/
+ 1520  ll
+ 1521  nano deploy_environment.sh 
+ 1522  cd ..
+ 1523  code
+ 1524  code .
+ 1525  cd deployment/
+ 1526  ./deploy_environment.sh 
+ 1527  cd ../..
+ 1528  ll | grep /unitree_ros2
+ 1529  ll | grep /unitree
+ 1530  ll | grep unitree
+ 1531  git clone https://github.com/unitreerobotics/unitree_ros2
+ 1532  cd unitree_ros2/
+ 1533  ll
+ 1534  sudo apt install ros-foxy-rmw-cyclonedds-cpp
+ 1535  sudo apt install ros-foxy-rosidl-generator-dds-idl
+ 1536  sudo apt install libyaml-cpp-dev
+ 1537  sudo apt install ros-foxy-rmw-cyclonedds-cpp
+ 1538  sudo apt update
+ 1539  source ~/.bashrc 
+ 1540  nano ~/.bashrc
+ 1541  ros2 
+ 1542  colcon build
+ 1543  ./deploy_environment.sh 
+ 1544  cd ../HoloMotion/deployment/
+ 1545  ./deploy_environment.sh 
+ 1546  cd /opt/ros/foxy/
+ 1547  cd /opt/ros/
+ 1548  ll
+ 1549  cd ~/HoloMotion/
+ 1550  ll
+ 1551  nano deploy
+ 1552  cd deployment/
+ 1553  ll
+ 1554  ./deploy_environment.sh 
+ 1555  cd ~/unitree_ros2/cyclonedds_ws/src
+ 1556  git clone https://github.com/ros2/rmw_cyclonedds -b humble
+ 1557  git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x 
+ 1558  cd ..
+ 1559  colcon build --packages-select cyclonedds
+ 1560  sudo apt install ros-humble-rmw-cyclonedds-cpp
+ 1561  sudo apt install ros-humble-cyclonedds
+ 1562  sudo apt install ros-humble-rosidl-generator-dds-idl
+ 1563  apt --fix-broken
+ 1564  apt --fix-broken install
+ 1565  sudo apt --fix-broken install
+ 1566  source /opt/ros/humble/setup.bash
+ 1567  cd ../
+ 1568  sudo apt update
+ 1569  sudo apt install ros-humble-rmw-cyclonedds-cpp ros-humble-rosidl-generator-dds-idl
+ 1570  sudo apt --fix-broken install
+ 1571  colcon build --packages-select unitree_go unitree_api
+ 1572  sudo dpkg -i --force-overwrite /var/cache/apt/archives/ros-humble-cyclonedds_0.10.5-2jammy.20250701.012606_amd64.deb
+ 1573  source /opt/ros/humble/setup.bash 
+ 1574  colcon build --packages-select unitree_go unitree_api
+ 1575  sudo apt install libyaml-cpp-dev
+ 1576  sudo apt install ros-humble-rmw-cyclonedds-cpp ros-humble-rosidl-generator-dds-idl
+ 1577  ll
+ 1578  colcon build --packages-select unitree_api unitree_go
+ 1579  conda deactivate
+ 1580  colcon build --packages-select unitree_api unitree_go
+ 1581  python3
+ 1582  which python3
+ 1583  sudo apt update
+ 1584  sudo apt install -y python3-empy
+ 1585  colcon build --packages-select unitree_api unitree_go
+ 1586  which python3
+ 1587  rm -rf build install log
+ 1588  colcon build --packages-select unitree_api unitree_go
+ 1589  colcon build 
+ 1590  cd ~/HoloMotion/
+ 1591  ll
+ 1592  cd deployment/
+ 1593  ll
+ 1594  ./unitree_g1_ros2_29dof/
+ 1595  ./deploy_environment.sh 
+ 1596  source /opt/ros/humble/setup.bash
+ 1597  ros2 pkg list | grep unitree
+ 1598  ./deploy_environment.sh 
+ 1599  source ~/unitree_ros2/install/setup.bash 
+ 1600  ./deploy_environment.sh 
+ 1601  source ~/unitree_ros2/install/setup.bash 
+ 1602  ./deploy_environment.sh 
+ 1603  source ~/unitree_ros2/install/setup.bash 
+ 1604  ./deploy_environment.sh 
+ 1605  cd ..
+ 1606  git submodule update --init --recursive
+ 1607  cd deployment/
+ 1608  ll
+ 1609  cd unitree_g1_ros2_29dof/
+ 1610  ll
+ 1611  colon build
+ 1612  colcon build
+ 1613  cd src/
+ 1614  ll
+ 1615  git submodule update --init --recursive
+ 1616  make
+ 1617  cmake
+ 1618  cd src/
+ 1619  cmake
+ 1620  cmake ..
+ 1621  cd ../
+ 1622  ll
+ 1623  cd ../../
+ 1624  colcon build --packages-select humanoid_control
+ 1625  conda deactivate
+ 1626  colcon build --packages-select humanoid_control
+ 1627  conda deactivate
+ 1628  colcon build --packages-select humanoid_control
+ 1629  sudo apt install -y python3-catkin-pkg python3-catkin-pkg-modules
+ 1630  colcon build --packages-select humanoid_control
+ 1631  which python
+ 1632  which python3
+ 1633  rm -rf build install log
+ 1634  colcon build --packages-select humanoid_control
+ 1635  colcon build 
+ 1636  cd unitree_g1_ros2_29dof/src/
+ 1637  ll
+ 1638  cd src/
+ 1639  ll
+ 1640  cd ..
+ 1641  ./deploy_environment.sh 
+ 1642  cd ..
+ 1643  ll
+ 1644  cd thirdparties/
+ 1645  ll
+ 1646  pip install -e ./smplx
+ 1647  conda env list
+ 1648  conda activate holomotion_deploy
+ 1649  pip install -e ./smplx
+ 1650  pip install -e ./GMR --no-deps
+ 1651  source deploy.env
+ 1652  cd ..
+ 1653  ll
+ 1654  source holomotion/scripts/deploy.env
+ 1655  ll holomotion/scripts/
+ 1656  conda env create -f environments/environment_train_isaaclab_cu128.yaml
+ 1657  conda activate BeyondMimic
+ 1658  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/mzwpcqaa
+ 1659  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject5 --resume True   --load_run 2025-10-30_09-45-45_train_dance2_subject5   --checkpoint model_129000.pt
+ 1660  conda activate BeyondMimic
+ 1661  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/5sfpnngr
+ 1662  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject5 --resume True   --load_run 2025-10-24_11-10-48_train_dance2_subject5   --checkpoint model_60500.pt
+ 1663  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/mzwpcqaa
+ 1664  python scripts/rsl_rl/train.py   --task Tracking-Flat-G1-Wo-State-Estimation-v0   --registry_name xboninglix-technical-university-of-munich-org/wandb-registry-motions/dance2_subject4   --headless   --logger wandb --log_project_name csv_to_npz   --run_name train_dance2_subject5 --resume True   --load_run 2025-10-27_09-42-46_train_dance2_subject5   --checkpoint model_120499.pt
+ 1665  ll
+ 1666  git add .
+ 1667  git commit -am "add domain randomization"
+ 1668  git push
+ 1669  git remote -v
+ 1670  git remote set-url origin https://github.com/I3NLi/whole_body_tracking.git
+ 1671  git push
+ 1672  git config --list --show-origin
+ 1673  cp ~/.gitconfig ~/gitconfig_backup_$(date +%Y%m%d).txt
+ 1674  cd ~/.gitconfig
+ 1675  cd ~
+ 1676  ll
+ 1677  cd whole_body_tracking/
+ 1678  git branch
+ 1679  git push
+ 1680  ls ~/.git-credentials
+ 1681  nano /home/hiyio/.git-credentials
+ 1682  mv /home/hiyio/.git-credentials /home/hiyio/.git-credentials-T1Amoo
+ 1683  ll
+ 1684  git push
+ 1685  cd ~/.ssh
+ 1686  ll
+ 1687  cd anyscale/
+ 1688  ll
+ 1689  cd ../../
+ 1690  ll /home/hiyio/
+ 1691  git config --show-origin credential.helper
+ 1692  nano /home/hiyio/.gitconfig 
+ 1693  mv /home/hiyio/.gitconfig  /home/hiyio/.gitconfig-T1Amoo
+ 1694  git push
+ 1695  cd ~/whole_body_tracking/
+ 1696  git push
+ 1697  git config credential.helper
+ 1698  git remote -v
+ 1699  git config --unset credential.helper
+ 1700  git push
+ 1701  git config --global --unset credential.helper
+ 1702  git push
+ 1703  git config --global - -unset credential.helper
+ 1704  git config --global --unset credential.helper
+ 1705  git push
+ 1706  git config --global --unset credential.helper
+ 1707  git push
+ 1708  git config --list --show-origin | grep credential
+ 1709  cat ~/.git-credentials
+ 1710  cat .git/credentials
+ 1711  git remote set-url origin git@github.com:I3NLi/whole_body_tracking.git
+ 1712  git push
+ 1713  sudo apt update
+ 1714  sudo apt install git-credential-manager-core -y
+ 1715  cd ~/Downloads/
+ 1716  wget https://github.com/git-ecosystem/git-credential-manager/releases/latest/download/gcm-linux_amd64.deb
+ 1717  sudo dpkg -i gcm-linux_amd64.deb
+ 1718  ..
+ 1719  ll
+ 1720  cd ~/whole_body_tracking/
+ 1721  ll
+ 1722  git remote set-url origin https://github.com/I3NLi/whole_body_tracking.git
+ 1723  git remote -v
+ 1724  git push
+ 1725  cd ~/Downloads/
+ 1726  wget https://github.com/git-ecosystem/git-credential-manager/releases/download/v2.6.1/gcm-linux_amd64.2.6.1.deb
+ 1727  sudo dpkg -i gcm-linux_amd64.2.6.1.deb
+ 1728  git-credential-manager configure
+ 1729  git config --global credential.helper
+ 1730  cd ~/whole_body_tracking/
+ 1731  git push
+ 1732  git remote set-url origin https://github.com/I3NLi/whole_body_tracking.git
+ 1733  git remote -v
+ 1734  git-credential-manager configure
+ 1735  git config --global credential.credentialStore secretservice
+ 1736  git push
+ 1737  git pull
+ 1738  git config pull.ff only
+ 1739  git pull
+ 1740  git config pull.rebase true
+ 1741  git pull
+ 1742  git pull --rebase
+ 1743  git commit -am "add some missing files"
+ 1744  git pull --rebase
+ 1745  git pull --rebase origin main
+ 1746  git rebase --continue
+ 1747  git pull --rebase origin main
+ 1748  git push
+ 1749  ros2 launch motion_tracking_controller mujoco.launch.py wandb_path:=xboninglix-technical-university-of-munich/csv_to_npz/64bpnf3d
+ 1750  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --wandb_path=xboninglix-technical-university-of-munich/csv_to_npz/mzwpcqaa
+ 1751  ll /home/hiyio/whole_body_tracking/wandb/latest-run/files
+ 1752  python play_local.py   --task=g1_flat_env   --motion_file=/home/hiyio/whole_body_tracking/data/motions/dance2_subject5.npz   --num_envs=8   --video
+ 1753  python scripts/rsl_rl/play_local.py   --task=g1_flat_env   --motion_file=/home/hiyio/whole_body_tracking/data/motions/dance2_subject5.npz   --num_envs=8   --video
+ 1754  nvdia-smi
+ 1755  nvidia-smi
+ 1756  lsmod | grep nvidia
+ 1757  cat /proc/driver/nvidia/version
+ 1758  dpkg -l | grep -i nvidia-driver
+ 1759  dpkg -l | grep -i nvidia-utils
+ 1760  dpkg -l | grep -i nvidia-driver
+ 1761  nvidia-smi
+ 1762  lsmod | grep nvidia
+ 1763  sudo modprobe nvidia
+ 1764  history
+ 1765  cd ~/Downloads/
+ 1766  ll
+ 1767  uname -m
+ 1768  dpkg --print-architecture
+ 1769  chmod +x NVIDIA-Linux-x86_64-580.105.08.run 
+ 1770  ./NVIDIA-Linux-x86_64-580.105.08.run 
+ 1771  sudo ./NVIDIA-Linux-x86_64-580.105.08.run 
+ 1772  nvdia-smi
+ 1773  nvidia-smi
+ 1774  sudo dmesg | grep -i nvidia | tail -n 30
+ 1775  sudo mokutil --sb-state
+ 1776  nvidia-smi
+ 1777  sudo apt purge 'nvidia-*'
+ 1778  sudo apt autoremove --purge -y
+ 1779  sudo apt install -y ubuntu-drivers-common
+ 1780  ubuntu-drivers devices
+ 1781  sudo apt purge 'nvidia-*' -y
+ 1782  sudo apt autoremove --purge -y
+ 1783  sudo apt install -y ubuntu-drivers-common
+ 1784  sudo apt install -y nvidia-driver-580-open
+ 1785  sudo reboot
+ 1786  nvidia-smi
+ 1787  ll
+ 1788  nano ~/.bashrc
+ 1789  python scripts/replay_motion.py   --motion_file /home/hiyio/whole_body_tracking/motions/dance1_subject1.npz   --renderer RayTracedLighting   --headless False
+ 1790  python scripts/replay_npz_local.py   --motion_file /home/hiyio/whole_body_tracking/motions/dance1_subject1.npz   --renderer RayTracedLighting   --headless False
+ 1791  conda env list
+ 1792  conda activate BeyondMimic
+ 1793  python scripts/replay_npz_local.py   --motion_file /home/hiyio/whole_body_tracking/motions/dance1_subject1.npz   --renderer RayTracedLighting   --headless False
+ 1794  python scripts/replay_npz_local.py   --motion_file /home/hiyio/whole_body_tracking/motions/dance1_subject1.npz 
+ 1795  git checkout scripts/replay_npz.py
+ 1796  python scripts/replay_npz_local.py   --motion_file /home/hiyio/whole_body_tracking/motions/dance1_subject1.npz 
+ 1797  ll -r .
+ 1798  conda env BeyondMimic
+ 1799  conde env list
+ 1800  conda env list
+ 1801  conda activate BeyondMimic
+ 1802  python scripts/rsl_rl/train_local.py --motion_file="/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz" --task=Tracking-Flat-G1-v0 --video 
+ 1803  python scripts/rsl_rl/train_local.py --motion_file="/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz" --task=Tracking-Flat-G1-v0 --video --headless
+ 1804  python scripts/rsl_rl/train_local.py --motion_file="/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz" --task=Tracking-Flat-G1-v0 --headless
+ 1805  /usr/bin/python3
+ 1806  ll
+ 1807  git checkout offline
+ 1808  git checkout main
+ 1809  git branch offline-new
+ 1810  git checkout offlline-new
+ 1811  git checkout -b offlline-new
+ 1812  ll ~/LAFAN1_Retargeting_Dataset/
+ 1813  ll ~/LAFAN1_Retargeting_Dataset/g1/
+ 1814  ll ~/LAFAN1_Retargeting_Dataset/g1/python csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30   --output_fps 50
+ 1815  python csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30   --output_fps 50
+ 1816  python scripts/csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30   --output_fps 50
+ 1817  conda env list
+ 1818  conda activate Beyondmimic
+ 1819  conda activate BeyondMimic
+ 1820  python scripts/csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30   --output_fps 50
+ 1821  python scripts/csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30
+ 1822  python scripts/csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30 
+ 1823  python scripts/csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30 --record
+ 1824  sudo apt install ffmpeg -y
+ 1825  python scripts/csv_to_npz_local.py   --input_file ~/LAFAN1_Retargeting_Dataset/g1   --input_fps 30 --record
+ 1826  git commit -am "Offline conversion from CSV to NPZ"
+ 1827  git add .
+ 1828  git commit -am "[feat]Offline conversion from CSV to NPZ"
+ 1829  python scripts/rsl_rl/train_local.py --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz --task=Tracking-Flat-G1-v0 --headless
+ 1830  python scripts/rsl_rl/train_local.py --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz --task=Tracking-Flat-G1-v0 --headless --resume
+ 1831  python scripts/rsl_rl/train_local.py --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz --task=Tracking-Flat-G1-v0 --headless 
+ 1832  python scripts/rsl_rl/train_local.py --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz --task=Tracking-Flat-G1-v0 --headless --resume True
+ 1833  python scripts/rsl_rl/train_local.py --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz --task=Tracking-Flat-G1-v0 --headless --resume True --load_run 2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0
+ 1834  python scripts/rsl_rl/train_local.py --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz --task=Tracking-Flat-G1-v0 --headless --resume True --load_run 2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0 --load_checkpoint -1
+ 1835  python scripts/rsl_rl/train_local.py --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz --task=Tracking-Flat-G1-v0 --headless --resume /home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_3500.pt
+ 1836  python scripts/rsl_rl/train_local.py   --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz   --task=Tracking-Flat-G1-v0   --resume True   --load_checkpoint /home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_800.pt
+ 1837  python scripts/rsl_rl/train_local.py   --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz   --task=Tracking-Flat-G1-v0   --resume True   --load_checkpoint /home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_3500.pt
+ 1838  cls
+ 1839  clear
+ 1840  python scripts/your_train_script.py   --task Tracking-Flat-G1-v0   --motion_file /home/hiyio/path/to/dance1_subject1.npz   --resume   --load_run "2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0"   --checkpoint "model_3500.pt"   --num_envs 4096   --max_iterations 10000   --headless
+ 1841  clear
+ 1842  python scripts/rsl_rl/train_local.py   --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz   --task=Tracking-Flat-G1-v0   --resume True
+ 1843  conda activate BeyondMimic
+ 1844  python scripts/rsl_rl/play_local.py --task Isaac-MyTask-Play-v0 --num_envs 1
+ 1845  python scripts/rsl_rl/play_local.py --task Tracking-Flat-G1-v0 --num_envs 1
+ 1846  python scripts/rsl_rl/play_local.py --task Tracking-Flat-G1-v0 --num_envs 2
+ 1847  conda activate BeyondMimic
+ 1848  pip freeze > requirements.txt
+ 1849  ll motions/
+ 1850  ll
+ 1851  git push 
+ 1852  git push --set-upstream origin offline
+ 1853  git checkout master
+ 1854  git checkout main
+ 1855  git merge offline
+ 1856  git log
+ 1857  git reset --hard  812b7ab5228302d819af97d7787989d74a8b4992
+ 1858  git merge offlline-new
+ 1859  git push
+ 1860  git pull
+ 1861  git remote -v
+ 1862  git push origin main
+ 1863  git push origin offline
+ 1864  git branch
+ 1865  git checkout offline-new
+ 1866  git checkout offlline-new
+ 1867  git push origin offline
+ 1868  git add .
+ 1869  git status
+ 1870  git commit -am "[doc] init doc"
+ 1871  git push
+ 1872  git push origin offline
+ 1873  git branch -D offline
+ 1874  git branch -D offline-new
+ 1875  git push
+ 1876  git push --set-upstream origin main
+ 1877  git push --set-upstream origin offline
+ 1878  git push --set-upstream origin offline-v0
+ 1879  git rm -r --cached motions
+ 1880  git commit -am "[fix]remove some cached"
+ 1881  git push origin main
+ 1882  git push origin offline
+ 1883  git push --set-upstream origin offline
+ 1884  cd ..
+ 1885  cp -r whole_body_tracking whole_body_tracking_backup
+ 1886  pip install git-filter-repo
+ 1887  git filter-repo -h
+ 1888  git filter-repo --path motions/ --invert-paths
+ 1889  git filter-repo --path motions/ --invert-paths --force
+ 1890  git add .
+ 1891  git commit -m "Ignore motions folder and clean LFS config"
+ 1892  git push origin main
+ 1893  git remote -v
+ 1894  git remote add origin https://github.com/I3NLi/whole_body_tracking.git.
+ 1895  git remote add origin https://github.com/I3NLi/whole_body_tracking.git
+ 1896  git remote -v
+ 1897  git remote reset-url origin https://github.com/I3NLi/whole_body_tracking.git
+ 1898  git remote set-url origin https://github.com/I3NLi/whole_body_tracking.git
+ 1899  git remote -v
+ 1900  git push origin main 
+ 1901  git push origin offline
+ 1902  git checkout main
+ 1903  git pull
+ 1904  git pull origin main
+ 1905  git pull origin main -f
+ 1906  git fetch origin
+ 1907  git reset --hard origin/main
+ 1908  git status
+ 1909  git add .
+ 1910  git commit -am "[fix] add logs* motions to gitignore"
+ 1911  git checkout offlline-new
+ 1912  git add .
+ 1913  git log /home/hiyio/whole_body_tracking/scripts/replay_npz_local.py
+ 1914  git log /home/hiyio/whole_body_tracking/motions
+ 1915  git checkout main
+ 1916  git merge offlline-new
+ 1917  git pull
+ 1918  git branch --set-upstream-to=origin/main main
+ 1919  git pull
+ 1920  git checkout -b bestCheckPoint
+ 1921  git checkout .
+ 1922  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-v0 --num_envs=2
+ 1923  conda activate BeyondMimic
+ 1924  python scripts/rsl_rl/play.py --task=Tracking-Flat-G1-v0 --num_envs=2
+ 1925  python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-v0 --num_envs=2
+ 1926  python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-v0 --num_envs=2 --video
+ 1927  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-v0 --num_envs=2 --resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_3500.pt
+ 1928  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-v0 --num_envs=2 --resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_3500.pt --motion_file=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/motion.npz
+ 1929  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.mp4 \
+ 1930  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.mp4 
+ 1931  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.mp4
+ 1932  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.npz
+ 1933  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --motion_file=/home/hiyio/whole_body_tracking/motions/dance2_subject4.npz
+ 1934  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --motion_file=/home/hiyio/whole_body_tracking/motions/dance2_subject4.npz --headless
+ 1935  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --motion_file=/home/hiyio/whole_body_tracking/motions/dance2_subject4.npz --headless --num_envs=10000
+ 1936  nvidia-smi
+ 1937  git add .
+ 1938  git -am "[feat] Localization v1.0"
+ 1939  git commit -am "[feat] Localization v1.0"
+ 1940  git push
+ 1941  git push --set-upstream origin offline
+ 1942  git status
+ 1943  git add .
+ 1944  git status
+ 1945  nvidia-smi
+ 1946  conda activate BeyondMimic
+ 1947  python scripts/rsl_rl/train_local.py   --motion_file="/home/hiyio/whole_body_tracking/motions/dance1_subject1.npz"   --task=Tracking-Flat-G1-v0   --headless
+ 1948  ll
+ 1949  conda activate BeyondMimic
+ 1950  ll
+ 1951  python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0
+ 1952  python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2
+ 1953  conda activate BeyondMimic
+ 1954  ll
+ 1955  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=250000 --motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.mp4 --headless \
+ 1956  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --resume=True --resume_path= /home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_16-04-06_dance2_subject4+Tracking-Flat-G1-Wo-State-Estimation-v0/model_7500.pt --motion_file= /home/hiyio/whole_body_tracking/motions/dance2_subject4.npz --headless
+ 1957  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --resume=True --resume_path= /home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_16-04-06_dance2_subject4+Tracking-Flat-G1-Wo-State-Estimation-v0/model_7500.pt --motion_file=/home/hiyio/whole_body_tracking/motions/dance2_subject4.npz --headless
+ 1958  python scripts/rsl_rl/train_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2 --resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_16-04-06_dance2_subject4+Tracking-Flat-G1-Wo-State-Estimation-v0/model_7500.pt --motion_file=/home/hiyio/whole_body_tracking/motions/dance2_subject4.npz --headless
+ 1959  conda activate BeyondMimic
+ 1960  python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=2
+ 1961  python scripts/rsl_rl/play_local.py --task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_env=2 --checkpoint_name=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-17_11-14-56_dance2_subject4+Tracking-Flat-G1-Wo-State-Estimation-v0/model_133000.pt
+ 1962  history > Docs/history

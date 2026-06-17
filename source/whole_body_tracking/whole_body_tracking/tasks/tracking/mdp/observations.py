@@ -11,6 +11,35 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
 
+def generated_commands_filtered(
+    env: ManagerBasedEnv,
+    command_name: str,
+    joint_names: list[str] | None = None,
+    exclude_joint_names: list[str] | None = None,
+) -> torch.Tensor:
+    command: MotionCommand = env.command_manager.get_term(command_name)
+
+    if joint_names is None and exclude_joint_names is None:
+        return command.command
+
+    joint_id_to_name = list(command.robot.joint_names)
+    if joint_names is not None:
+        joint_name_set = set(joint_names)
+        joint_ids = [joint_id for joint_id, name in enumerate(joint_id_to_name) if name in joint_name_set]
+    else:
+        exclude_name_set = set(exclude_joint_names or [])
+        joint_ids = [joint_id for joint_id, name in enumerate(joint_id_to_name) if name not in exclude_name_set]
+
+    joint_ids_tensor = torch.tensor(joint_ids, dtype=torch.long, device=command.joint_pos.device)
+    return torch.cat(
+        [
+            torch.index_select(command.joint_pos, dim=1, index=joint_ids_tensor),
+            torch.index_select(command.joint_vel, dim=1, index=joint_ids_tensor),
+        ],
+        dim=1,
+    )
+
+
 def robot_anchor_ori_w(env: ManagerBasedEnv, command_name: str) -> torch.Tensor:
     command: MotionCommand = env.command_manager.get_term(command_name)
     mat = matrix_from_quat(command.robot_anchor_quat_w)

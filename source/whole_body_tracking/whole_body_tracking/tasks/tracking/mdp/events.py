@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 import torch
+import warp as wp
 
 import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation
@@ -21,11 +22,19 @@ from isaaclab.envs.mdp.events import (
     randomize_rigid_body_scale as _base_randomize_rigid_body_scale,
     randomize_visual_color as _BaseRandomizeVisualColor,
     randomize_visual_texture_material as _BaseRandomizeVisualTextureMaterial,
+    apply_external_force_torque as _base_apply_external_force_torque,
 )
 from isaaclab.managers import EventTermCfg, SceneEntityCfg
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
+
+
+def _as_torch(value, device: str | torch.device | None = None) -> torch.Tensor:
+    if torch.is_tensor(value):
+        return value
+    tensor = wp.to_torch(value)
+    return tensor.to(device=device) if device is not None else tensor
 
 
 __all__ = (
@@ -41,6 +50,7 @@ __all__ = (
     "randomize_physics_scene_gravity",
     "randomize_visual_texture_material",
     "randomize_visual_color",
+    "apply_external_force_torque",
 )
 
 
@@ -207,7 +217,8 @@ def randomize_joint_default_pos(
     asset: Articulation = env.scene[asset_cfg.name]
 
     # save nominal value for export
-    asset.data.default_joint_pos_nominal = torch.clone(asset.data.default_joint_pos[0])
+    default_joint_pos = _as_torch(asset.data.default_joint_pos, asset.device)
+    asset.data.default_joint_pos_nominal = torch.clone(default_joint_pos[0])
 
     # resolve environment ids
     if env_ids is None:
@@ -232,14 +243,14 @@ def randomize_joint_default_pos(
         joint_ids = torch.tensor(asset_cfg.joint_ids, dtype=torch.int, device=asset.device)
 
     if pos_distribution_params is not None:
-        pos = asset.data.default_joint_pos.to(asset.device).clone()
+        pos = default_joint_pos.clone()
         pos = _randomize_prop_by_op(
             pos, pos_distribution_params, env_ids, joint_ids, operation=operation, distribution=distribution
         )[env_ids][:, joint_ids]
 
         if env_ids != slice(None) and joint_ids != slice(None):
             env_ids = env_ids[:, None]
-        asset.data.default_joint_pos[env_ids, joint_ids] = pos
+        default_joint_pos[env_ids, joint_ids] = pos
         # update the offset in action since it is not updated automatically
         env.action_manager.get_term("joint_pos")._offset[env_ids, joint_ids] = pos
 
@@ -348,6 +359,35 @@ def randomize_physics_scene_gravity(
         distribution=distribution,
     )
 
+def apply_external_force_torque(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor,
+    force_range: tuple[float, float],
+    torque_range: tuple[float, float],
+    asset_cfg: SceneEntityCfg = SceneEntityCfg(name="robot"),
+):
+    """对刚体施加随机外力和力矩（带日志封装版本）。
+
+    直接调用 IsaacLab 自带的 isaaclab.envs.mdp.events.apply_external_force_torque。
+    force_range / torque_range 是标量区间 (min, max)，每个 body、每个 env 会各采一组随机 3D 向量。
+    """
+    record_randomization_event(
+        "apply_external_force_torque",
+        env_ids=env_ids,
+        details={
+            "asset": asset_cfg.name,
+            "body_names": getattr(asset_cfg, "body_names", None),
+            "force_range": force_range,
+            "torque_range": torque_range,
+        },
+    )
+    return _base_apply_external_force_torque(
+        env,
+        env_ids,
+        force_range,
+        torque_range,
+        asset_cfg=asset_cfg,
+    )
 
 class randomize_rigid_body_material(_BaseRandomizeRigidBodyMaterial):
     def __init__(self, cfg: EventTermCfg, env: ManagerBasedEnv):

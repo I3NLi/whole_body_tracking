@@ -36,6 +36,10 @@ VELOCITY_RANGE = {
     "yaw": (-0.78, 0.78),
 }
 
+# Scale push strength for easier tuning
+PUSH_VELOCITY_SCALE = 1.0
+PUSH_VELOCITY_RANGE = {k: (v[0] * PUSH_VELOCITY_SCALE, v[1] * PUSH_VELOCITY_SCALE) for k, v in VELOCITY_RANGE.items()}
+
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
@@ -86,6 +90,9 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(1.0e9, 1.0e9),
         debug_vis=True,
+        motion_hold_seconds=0.0,
+        random_pause_prob=0.0,
+        random_pause_duration_s=(0.0, 0.0),
         pose_range={
             "x": (-0.05, 0.05),
             "y": (-0.05, 0.05),
@@ -122,6 +129,11 @@ class ObservationsCfg:
         motion_anchor_ori_b = ObsTerm(
             func=mdp.motion_anchor_ori_b, params={"command_name": "motion"}, noise=Unoise(n_min=-0.05, n_max=0.05)
         )
+        base_gravity = ObsTerm(
+            func=mdp.body_projected_gravity_b,
+            params={"asset_cfg": SceneEntityCfg("robot", body_names=["pelvis"])},
+            noise=Unoise(n_min=-0.02, n_max=0.02),
+        )  
         base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.5, n_max=0.5))
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
@@ -131,6 +143,10 @@ class ObservationsCfg:
         def __post_init__(self):
             self.enable_corruption = True
             self.concatenate_terms = True
+            # ✅ 加 history
+
+            self.history_length = 1           # ← 你要几帧
+            self.flatten_history_dim = True  # ← (H, D) → (H*D,)
 
     @configclass
     class PrivilegedCfg(ObsGroup):
@@ -172,7 +188,12 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
-            "rest_offset_distribution_params": (0.0, 0.003),
+            # Keep rest offset fixed at zero. On resume, PhysX may validate the
+            # updated rest offset against the previous contact offset before the
+            # new contact offset is applied, which can transiently trip
+            # `restOffset < contactOffset` even when the sampled ranges are
+            # nominally disjoint.
+            "rest_offset_distribution_params": (0.0, 0.0),
             "contact_offset_distribution_params": (0.003, 0.006),
         },
     )
@@ -244,9 +265,23 @@ class EventCfg:
         func=mdp.push_by_setting_velocity,
         mode="interval",
         interval_range_s=(1.0, 3.0),
-        params={"velocity_range": VELOCITY_RANGE},
+        params={"velocity_range": PUSH_VELOCITY_RANGE},
     )
 
+    # interval: 额外在物理上施加随机外力 / 力矩
+    # external_wrench = EventTerm(
+    #     func=mdp.apply_external_force_torque,
+    #     mode="interval",
+    #     interval_range_s=(5.0, 10.0),
+    #     params={
+    #         # 这里只对躯干施加外力，避免对所有小 link 随便乱推导致发散
+    #         "asset_cfg": SceneEntityCfg("robot", body_names="torso_link"),
+    #         # 力的采样区间 (N)
+    #         "force_range": (-2.0, 2.0),
+    #         # 力矩的采样区间 (N·m)
+    #         "torque_range": (-2.0, 2.0),
+    #     },
+    # )
 
 @configclass
 class RewardsCfg:
@@ -282,6 +317,13 @@ class RewardsCfg:
         weight=1.0,
         params={"command_name": "motion", "std": 3.14},
     )
+    # Encourage higher base height (weights are controlled per-robot in env configs).
+    base_height_above = RewTerm(func=mdp.base_height_above, weight=0.0, params={"min_height": 0.7, "max_height": 0.9})
+    # Base stability terms (weights are controlled per-robot in env configs).
+    # Original defaults (kept here for reference): -0.5, -0.05, -0.5
+    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=0.0)
+    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=0.0)
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0.0)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-1e-1)
     joint_limit = RewTerm(
         func=mdp.joint_pos_limits,
@@ -308,6 +350,10 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    non_finite_robot_state = DoneTerm(
+        func=mdp.non_finite_robot_state,
+        params={"asset_cfg": SceneEntityCfg("robot")},
+    )
     anchor_pos = DoneTerm(
         func=mdp.bad_anchor_pos_z_only,
         params={"command_name": "motion", "threshold": 0.25},
@@ -316,19 +362,19 @@ class TerminationsCfg:
         func=mdp.bad_anchor_ori,
         params={"asset_cfg": SceneEntityCfg("robot"), "command_name": "motion", "threshold": 0.8},
     )
-    ee_body_pos = DoneTerm(
-        func=mdp.bad_motion_body_pos_z_only,
-        params={
-            "command_name": "motion",
-            "threshold": 0.25,
-            "body_names": [
-                "left_ankle_roll_link",
-                "right_ankle_roll_link",
-                "left_wrist_yaw_link",
-                "right_wrist_yaw_link",
-            ],
-        },
-    )
+    # ee_body_pos = DoneTerm(
+    #     func=mdp.bad_motion_body_pos_z_only,
+    #     params={
+    #         "command_name": "motion",
+    #         "threshold": 0.25,
+    #         "body_names": [
+    #             "left_ankle_roll_link",
+    #             "right_ankle_roll_link",
+    #             "left_wrist_yaw_link",
+    #             "right_wrist_yaw_link",
+    #         ],
+    #     },
+    # )
 
 
 @configclass
@@ -368,8 +414,10 @@ class TrackingEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
         self.sim.physics_material = self.scene.terrain.physics_material
-        self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
+        if hasattr(self.sim, "physx"):
+            self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
         # viewer settings
         self.viewer.eye = (1.5, 1.5, 1.5)
-        self.viewer.origin_type = "asset_root"
+        # self.viewer.origin_type = "asset_root"
+        self.viewer.origin_type = "world"
         self.viewer.asset_name = "robot"

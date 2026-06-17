@@ -1,5 +1,0 @@
-# export mp4 needs  ffmpeg
-```
-sudo apt update
-sudo apt install ffmpeg -y
-```

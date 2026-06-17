@@ -9,6 +9,8 @@ class G1FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 500
     experiment_name = "g1_flat"
     empirical_normalization = True
+    use_amp = True
+    amp_dtype = "fp16"
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
@@ -31,6 +33,14 @@ class G1FlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 
+@configclass
+class G1FlatBackflipPPORunnerCfg(G1FlatPPORunnerCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        self.experiment_name = "g1_backflip"
+        self.max_iterations = 100000
+
+
 LOW_FREQ_SCALE = 0.5
 
 
@@ -41,3 +51,11 @@ class G1FlatLowFreqPPORunnerCfg(G1FlatPPORunnerCfg):
         self.num_steps_per_env = round(self.num_steps_per_env * LOW_FREQ_SCALE)
         self.algorithm.gamma = self.algorithm.gamma ** (1 / LOW_FREQ_SCALE)
         self.algorithm.lam = self.algorithm.lam ** (1 / LOW_FREQ_SCALE)
+
+
+@configclass
+class G1FlatWoStateCurriculumPPORunnerCfg(G1FlatPPORunnerCfg):
+    def __post_init__(self):
+        super().__post_init__()
+        self.experiment_name = "wsc_v1"
+        self.max_iterations = 80000

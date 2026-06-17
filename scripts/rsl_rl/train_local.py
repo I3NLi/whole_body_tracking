@@ -3,12 +3,53 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-v0 --num_envs=4096 \
+--resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/model_3500.pt \
+--motion_file=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-11-09_09-42-31_dance1_subject1+Tracking-Flat-G1-v0/motion.npz \
+"""
+
+
+"""
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 \
+--motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.npz \
+--headless
+"""
+
+"""
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 \
+--motion_files /home/hiyio/whole_body_tracking/motions/dance1_subject2.npz \
+                /home/hiyio/whole_body_tracking/motions/dance2_subject4.npz \
+--headless
+"""
+
+"""
+# 使用一个文件夹里多个 npz（自动收集 *.npz，若空则递归搜索子目录）
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 \
+--motion_dir /home/hiyio/whole_body_tracking/motions \
+--headless
+"""
+
+"""
+python scripts/rsl_rl/train_local.py \
+--task=Tracking-Flat-G1-Wo-State-Estimation-v0 --num_envs=4096 \
+--resume=True --resume_path=/home/hiyio/whole_body_tracking/logs/rsl_rl/g1_flat/2025-12-26_11-12-52_dance1_subject2+Tracking-Flat-G1-Wo-State-Estimation-v0/model_63500.pt \
+--motion_file=/home/hiyio/whole_body_tracking/motions/dance1_subject2.npz \
+--headless
+"""
+
 """Script to train RL agent with RSL-RL (local-only: load motion locally, save locally)."""
 
 # ---------- Launch Isaac Sim Simulator first ----------
 import argparse
 import sys
-import shutil  
+import shutil
+import glob
+import yaml
 
 from isaaclab.app import AppLauncher
 
@@ -27,10 +68,29 @@ parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy 
 parser.add_argument(
     "--motion_file",
     type=str,
-    required=True,
+    default=None,
     help="Path to local motion npz file (e.g. /path/to/motion.npz).",
 )
-
+parser.add_argument(
+    "--motion_files",
+    type=str,
+    nargs="+",
+    default=None,
+    help="List of motion npz files for mixed training.",
+)
+parser.add_argument(
+    "--motion_dir",
+    type=str,
+    default=None,
+    help="Directory containing motion npz files (all *.npz will be used).",
+)
+parser.add_argument(
+    "--motion_rounds",
+    type=int,
+    default=None,
+    help="If set and multiple motions are provided, train sequentially for N iterations per motion.",
+)
+parser.add_argument("--resume_path", type=str, default=None, help="Name of the task.") 
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -63,7 +123,7 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_pickle, dump_yaml
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
@@ -71,12 +131,130 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 import whole_body_tracking.tasks  # noqa: F401
 # 使用你本地仅保存版本的 Runner
 from whole_body_tracking.utils.my_on_policy_runner_local import MotionOnPolicyRunner as OnPolicyRunner
+from whole_body_tracking.utils.finite_rsl_rl_wrapper import FiniteRslRlVecEnvWrapper as RslRlVecEnvWrapper
+from whole_body_tracking.utils.rsl_rl_noise_guard import (
+    install_scalar_std_optimizer_guard,
+    sanitize_scalar_policy_std,
+)
 
 # cuDNN / TF32 设置
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
+
+
+# 多 npz 逻辑：
+# 1) --motion_files 按给定顺序加入；2) --motion_file 支持单个或逗号分隔追加；
+# 3) --motion_dir 收集目录下 *.npz（若为空则递归），按文件名排序；
+# 4) 展开 glob 并去重（保留首次出现的顺序）。
+# 解析得到的列表传给 env_cfg.commands.motion.motion_files；
+# 环境侧会为每个 env 采样一个 motion_id（可设权重，否则均匀），
+# 在 episode 结束或 motion 播完时重新采样；motion_files[0] 同时用于兼容单文件接口与 run_name。
+def _resolve_motion_files(args_cli: argparse.Namespace) -> list[str]:
+    files: list[str] = []
+    if args_cli.motion_files:
+        files.extend(args_cli.motion_files)
+    if args_cli.motion_file:
+        if "," in args_cli.motion_file:
+            files.extend([p for p in args_cli.motion_file.split(",") if p])
+        else:
+            files.append(args_cli.motion_file)
+    if args_cli.motion_dir:
+        if not os.path.isdir(args_cli.motion_dir):
+            raise FileNotFoundError(f"Motion dir not found: {args_cli.motion_dir}")
+        top_level_candidates = sorted(glob.glob(os.path.join(args_cli.motion_dir, "*.npz")))
+        top_level_files = [p for p in top_level_candidates if os.path.isfile(p)]
+        broken_top_level = [p for p in top_level_candidates if not os.path.isfile(p)]
+        if broken_top_level:
+            print(
+                f"[WARN] Ignoring {len(broken_top_level)} broken top-level motion link(s) under {args_cli.motion_dir}."
+            )
+
+        files.extend(top_level_files)
+        if not top_level_files:
+            # Prefer finalized motion exports under each motion folder's npz/ subdirectory.
+            recursive_npz_files = sorted(
+                glob.glob(os.path.join(args_cli.motion_dir, "**", "npz", "*.npz"), recursive=True)
+            )
+            recursive_npz_files = [p for p in recursive_npz_files if os.path.isfile(p)]
+            if recursive_npz_files:
+                files.extend(recursive_npz_files)
+            else:
+                recursive_candidates = sorted(
+                    glob.glob(os.path.join(args_cli.motion_dir, "**", "*.npz"), recursive=True)
+                )
+                recursive_files = [
+                    p
+                    for p in recursive_candidates
+                    if os.path.isfile(p)
+                    and f"{os.sep}gvhmr{os.sep}" not in p
+                    and os.path.basename(p) not in {"smpl.npz", "smplx.npz"}
+                ]
+                files.extend(recursive_files)
+
+    # expand any glob patterns
+    expanded: list[str] = []
+    for path in files:
+        if any(ch in path for ch in ["*", "?", "["]):
+            expanded.extend(sorted(glob.glob(path)))
+        else:
+            expanded.append(path)
+
+    # de-duplicate while preserving order
+    seen = set()
+    deduped: list[str] = []
+    for path in expanded:
+        abspath = os.path.abspath(path)
+        if abspath in seen:
+            continue
+        seen.add(abspath)
+        deduped.append(abspath)
+
+    if not deduped:
+        raise ValueError("No motion files provided. Use --motion_file, --motion_files, or --motion_dir.")
+
+    missing = [p for p in deduped if not os.path.isfile(p)]
+    if missing:
+        raise FileNotFoundError(f"Motion file(s) not found: {missing}")
+
+    return deduped
+
+
+def _fill_beyond_mimic_config_from_env(env, yaml_path: str, onnx_path: str | None = None) -> None:
+    """Update BeyondMimic.yaml with runtime kp/kd (and optional onnx_path)."""
+    if not os.path.isfile(yaml_path):
+        print(f"[WARN] BeyondMimic config not found, skip fill kp/kd: {yaml_path}")
+        return
+    try:
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"[WARN] Failed to read BeyondMimic config, skip fill kp/kd: {e}")
+        return
+
+    try:
+        robot = env.unwrapped.scene["robot"]
+        kp_lab = robot.data.joint_stiffness[0].detach().cpu().tolist()
+        kd_lab = robot.data.joint_damping[0].detach().cpu().tolist()
+    except Exception as e:
+        print(f"[WARN] Failed to read env joint stiffness/damping, skip fill kp/kd: {e}")
+        return
+
+    cfg["kp_lab"] = [float(v) for v in kp_lab]
+    cfg["kd_lab"] = [float(v) for v in kd_lab]
+    if onnx_path:
+        cfg["onnx_path"] = str(onnx_path)
+
+    try:
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=False)
+        if onnx_path:
+            print(f"[INFO] Filled kp_lab/kd_lab and onnx_path into: {yaml_path}")
+        else:
+            print(f"[INFO] Filled kp_lab/kd_lab from env into: {yaml_path}")
+    except Exception as e:
+        print(f"[WARN] Failed to write BeyondMimic config with kp/kd: {e}")
 
 
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
@@ -96,13 +274,27 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
 
     # --------- Local motion file only ---------
-    motion_file = os.path.abspath(args_cli.motion_file)
-    if not os.path.isfile(motion_file):
-        raise FileNotFoundError(f"Motion file not found: {motion_file}")
-    env_cfg.commands.motion.motion_file = motion_file
+    motion_files = _resolve_motion_files(args_cli)
+    env_cfg.commands.motion.motion_files = motion_files
+    env_cfg.commands.motion.motion_file = motion_files[0]
+    if args_cli.motion_rounds is not None and args_cli.motion_rounds <= 0:
+        raise ValueError("motion_rounds must be a positive integer.")
+    motion_total_rounds = None
+    use_motion_schedule = args_cli.motion_rounds is not None and len(motion_files) > 1
+    if args_cli.motion_rounds is not None:
+        if len(motion_files) == 1:
+            print("[INFO] motion_rounds set but only one motion; using it as max_iterations.")
+            agent_cfg.max_iterations = args_cli.motion_rounds
+        else:
+            motion_total_rounds = args_cli.motion_rounds * len(motion_files)
+            agent_cfg.max_iterations = motion_total_rounds
+            print(
+                f"[INFO] Motion schedule enabled: {len(motion_files)} motions x {args_cli.motion_rounds} iterations "
+                f"= {motion_total_rounds} total iterations."
+            )
 
     # --------- Default run_name: motion_name + task_name + timestamp ---------
-    motion_stem = os.path.splitext(os.path.basename(args_cli.motion_file))[0]
+    motion_stem = os.path.splitext(os.path.basename(motion_files[0]))[0]
     task_name = args_cli.task
     timestamp_compact = datetime.now().strftime("%Y%m%d-%H%M%S")
     if not getattr(agent_cfg, "run_name", None):
@@ -114,26 +306,64 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     print(f"[INFO] Logging experiment in directory: {log_root_path}")
 
     # log_dir = {YYYY-mm-dd_HH-MM-SS}_{run_name}
+    # Even when resuming from an explicit checkpoint path, start a fresh run
+    # directory for cleaner bookkeeping while loading weights from the old run.
     log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     if agent_cfg.run_name:
         log_dir += f"_{agent_cfg.run_name}"
+    if getattr(agent_cfg, "resume", False) and args_cli.resume_path:
+        resume_stem = os.path.splitext(os.path.basename(args_cli.resume_path))[0]
+        log_dir += f"_resume-{resume_stem}"
+        print(f"[INFO] Resuming from checkpoint into new log directory: {log_dir}")
     log_dir = os.path.join(log_root_path, log_dir)
 
     # create log directory before copy
     os.makedirs(log_dir, exist_ok=True)
 
+    # copy BeyondMimic policy config into log directory for reproducibility
+    beyond_mimic_cfg_src = "/home/hiyio/RoboMimic_Deploy/policy/beyond_mimic/config/BeyondMimic.yaml"
+    beyond_mimic_cfg_dst = os.path.join(log_dir, "BeyondMimic.yaml")
+    if os.path.isfile(beyond_mimic_cfg_src):
+        shutil.copy2(beyond_mimic_cfg_src, beyond_mimic_cfg_dst)
+        print(f"[INFO] BeyondMimic config copied to: {beyond_mimic_cfg_dst}")
+    else:
+        print(f"[WARN] BeyondMimic config not found, skip copy: {beyond_mimic_cfg_src}")
+
     # copy motion npz into log directory
-    dst_motion = os.path.join(log_dir, "motion.npz")
-    shutil.copy2(motion_file, dst_motion)
-    print(f"[INFO] Motion file copied to: {dst_motion}")
-    
-    motion_mp4 = os.path.splitext(motion_file)[0] + ".mp4"
-    if os.path.isfile(motion_mp4):
-        dst_mp4 = os.path.join(log_dir, "motion.mp4")
-        shutil.copy2(motion_mp4, dst_mp4)
-        print(f"[INFO] Motion video copied to: {dst_mp4}")
+    if len(motion_files) == 1:
+        dst_motion = os.path.join(log_dir, "motion.npz")
+        shutil.copy2(motion_files[0], dst_motion)
+        print(f"[INFO] Motion file copied to: {dst_motion}")
+
+        motion_mp4 = os.path.splitext(motion_files[0])[0] + ".mp4"
+        if os.path.isfile(motion_mp4):
+            dst_mp4 = os.path.join(log_dir, "motion.mp4")
+            shutil.copy2(motion_mp4, dst_mp4)
+            print(f"[INFO] Motion video copied to: {dst_mp4}")
+    else:
+        motions_dir = os.path.join(log_dir, "motions")
+        os.makedirs(motions_dir, exist_ok=True)
+        used_names: set[str] = set()
+        motion_list_path = os.path.join(log_dir, "motion_list.txt")
+        with open(motion_list_path, "w", encoding="utf-8") as f:
+            for idx, motion_path in enumerate(motion_files):
+                base = os.path.basename(motion_path)
+                name = base if base not in used_names else f"{idx:03d}_{base}"
+                used_names.add(name)
+                dst_motion = os.path.join(motions_dir, name)
+                shutil.copy2(motion_path, dst_motion)
+                f.write(f"{name}\t{motion_path}\n")
+
+                motion_mp4 = os.path.splitext(motion_path)[0] + ".mp4"
+                if os.path.isfile(motion_mp4):
+                    dst_mp4 = os.path.join(motions_dir, os.path.splitext(name)[0] + ".mp4")
+                    shutil.copy2(motion_mp4, dst_mp4)
+        print(f"[INFO] Motion files copied to: {motions_dir}")
     # --------- Create env ---------
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    run_onnx_name = f"{os.path.basename(log_dir)}.onnx"
+    run_onnx_path = os.path.join(log_dir, run_onnx_name)
+    _fill_beyond_mimic_config_from_env(env, beyond_mimic_cfg_dst, onnx_path=run_onnx_path)
 
     # video wrapper (optional)
     if args_cli.video:
@@ -152,19 +382,42 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env = multi_agent_to_single_agent(env)
 
     # RSL-RL VecEnv wrapper
-    env = RslRlVecEnvWrapper(env)
+    env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     # --------- Runner (local-only saver) ---------
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    if install_scalar_std_optimizer_guard(runner.alg.optimizer, runner.alg.policy):
+        print("[INFO] Installed scalar-std optimizer guard for RSL-RL policy noise.")
+    sanitize_scalar_policy_std(runner.alg.policy)
+    if use_motion_schedule:
+        runner.motion_schedule_enabled = True
+        runner.motion_schedule_total = motion_total_rounds
+        runner.motion_schedule_rounds = args_cli.motion_rounds
+        runner.motion_schedule_files = motion_files
+        runner.motion_schedule_start_iter = runner.current_learning_iteration
 
     # log git state
     runner.add_git_repo_to_log(__file__)
 
     # resume if requested
     if agent_cfg.resume:
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        # resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+        resume_path = args_cli.resume_path
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-        runner.load(resume_path)
+        try:
+            runner.load(resume_path)
+        except KeyError as e:
+            # Backward compatibility: older checkpoints may not contain obs_norm_state_dict.
+            if "obs_norm_state_dict" not in str(e):
+                raise
+            print("[WARN] Checkpoint missing obs_norm_state_dict. Falling back to legacy load path.")
+            loaded_dict = torch.load(resume_path, map_location=runner.device)
+            runner.alg.actor_critic.load_state_dict(loaded_dict["model_state_dict"])
+            runner.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
+            runner.current_learning_iteration = loaded_dict.get("iter", 0)
+            runner.last_learning_iteration = runner.current_learning_iteration
+        if sanitize_scalar_policy_std(runner.alg.policy):
+            print("[WARN] Resume checkpoint contained invalid scalar std values; clamped them to stay positive.")
 
     # persist configs
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
@@ -173,7 +426,32 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_pickle(os.path.join(log_dir, "params", "agent.pkl"), agent_cfg)
 
     # --------- Train ---------
-    runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
+    if use_motion_schedule:
+        motion_cmd = runner.env.unwrapped.command_manager.get_term("motion")
+        env_ids = torch.arange(motion_cmd.num_envs, device=motion_cmd.device)
+        original_weights = getattr(motion_cmd.cfg, "motion_sampling_weights", None)
+        for idx, motion_path in enumerate(motion_files):
+            runner.motion_schedule_index = idx
+            runner.motion_schedule_segment_start_iter = runner.current_learning_iteration
+            completed_rounds = idx * args_cli.motion_rounds
+            weights = [0.0] * len(motion_files)
+            weights[idx] = 1.0
+            motion_cmd.cfg.motion_sampling_weights = weights
+            with torch.inference_mode():
+                motion_cmd._resample_command(env_ids)
+            print(
+                f"[INFO] Motion schedule {idx + 1}/{len(motion_files)}: {os.path.basename(motion_path)} "
+                f"| completed {completed_rounds}/{motion_total_rounds} iterations"
+            )
+            runner.learn(num_learning_iterations=args_cli.motion_rounds, init_at_random_ep_len=(idx == 0))
+            completed_rounds = (idx + 1) * args_cli.motion_rounds
+            print(
+                f"[INFO] Motion schedule progress: {completed_rounds}/{motion_total_rounds} iterations done "
+                f"(last: {os.path.basename(motion_path)})"
+            )
+        motion_cmd.cfg.motion_sampling_weights = original_weights
+    else:
+        runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
 
     # close simulator
     env.close()

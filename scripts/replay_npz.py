@@ -9,6 +9,7 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import os
 import numpy as np
 import torch
 
@@ -17,11 +18,47 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Replay converted motions.")
 parser.add_argument("--registry_name", type=str, required=True, help="The name of the wand registry.")
+parser.add_argument(
+    "--robot",
+    type=str,
+    default="auto",
+    choices=("auto", "unitree_g1", "magicbot_z1"),
+    help="Robot articulation used to replay the motion. Defaults to inferring from joint_pos width.",
+)
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
+
+
+def _resolve_motion_file_from_registry(registry_name: str) -> str:
+    import pathlib
+
+    import wandb
+
+    if ":" not in registry_name:
+        registry_name += ":latest"
+    api = wandb.Api()
+    artifact = api.artifact(registry_name)
+    return str(pathlib.Path(artifact.download()) / "motion.npz")
+
+
+def _infer_robot_from_motion_file(motion_file: str) -> str:
+    with np.load(motion_file, allow_pickle=True) as data:
+        if "joint_pos" not in data:
+            raise KeyError(f"Missing 'joint_pos' in motion file: {motion_file}")
+        joint_count = int(data["joint_pos"].shape[1])
+    if joint_count == 29:
+        return "unitree_g1"
+    if joint_count == 24:
+        return "magicbot_z1"
+    raise ValueError(f"Unsupported joint_pos width={joint_count} in motion file: {motion_file}")
+
+
+args_cli.motion_file = os.path.abspath(os.path.expanduser(_resolve_motion_file_from_registry(args_cli.registry_name)))
+if args_cli.robot == "auto":
+    args_cli.robot = _infer_robot_from_motion_file(args_cli.motion_file)
 
 # launch omniverse app
 app_launcher = AppLauncher(args_cli)
@@ -40,7 +77,13 @@ from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 # Pre-defined configs
 ##
 from whole_body_tracking.robots.g1 import G1_CYLINDER_CFG
+from whole_body_tracking.robots.magicbot_z1 import MAGICBOT_Z1_CFG
 from whole_body_tracking.tasks.tracking.mdp import MotionLoader
+
+ROBOT_CFGS = {
+    "unitree_g1": G1_CYLINDER_CFG,
+    "magicbot_z1": MAGICBOT_Z1_CFG,
+}
 
 
 @configclass
@@ -67,21 +110,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # Define simulation stepping
     sim_dt = sim.get_physics_dt()
 
-    registry_name = args_cli.registry_name
-    if ":" not in registry_name:  # Check if the registry name includes alias, if not, append ":latest"
-        registry_name += ":latest"
-    import pathlib
-
-    import wandb
-
-    api = wandb.Api()
-    artifact = api.artifact(registry_name)
-    motion_file = str(pathlib.Path(artifact.download()) / "motion.npz")
-
     motion = MotionLoader(
-        motion_file,
+        args_cli.motion_file,
         torch.tensor([0], dtype=torch.long, device=sim.device),
         sim.device,
+        expected_joint_names=robot.joint_names,
     )
     time_steps = torch.zeros(scene.num_envs, dtype=torch.long, device=sim.device)
 
@@ -113,8 +146,10 @@ def main():
     sim = SimulationContext(sim_cfg)
 
     scene_cfg = ReplayMotionsSceneCfg(num_envs=1, env_spacing=2.0)
+    scene_cfg.robot = ROBOT_CFGS[args_cli.robot].replace(prim_path="{ENV_REGEX_NS}/Robot")
     scene = InteractiveScene(scene_cfg)
     sim.reset()
+    print(f"[INFO] Replaying with robot={args_cli.robot}")
     # Run the simulator
     run_simulator(sim, scene)
 

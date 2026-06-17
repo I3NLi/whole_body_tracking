@@ -44,3 +44,10 @@ _build
 
 **/assets/
 artifacts/
+Video/
+datasets/
+
+inputs/
+
+**/.tmp_pip_src_backup/**
+
